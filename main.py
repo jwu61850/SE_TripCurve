@@ -26,7 +26,7 @@ CURVE_FAMILY_MAP = {
 
 FIG_W_PX, FIG_H_PX = 500, 320
 LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95
-TOP_MARGIN, BOTTOM_MARGIN = 0.92, 0.12  # 大幅向上延伸圖表 (TOP_MARGIN 改為 0.92)
+TOP_MARGIN, BOTTOM_MARGIN = 0.92, 0.12
 
 # 載入字體 (若無向量字體則改用預設)
 try:
@@ -105,7 +105,7 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
 
     plot_x0 = int(FIG_W_PX * LEFT_MARGIN)
     plot_x1 = int(FIG_W_PX * RIGHT_MARGIN)
-    plot_y0 = int(FIG_H_PX * (1 - TOP_MARGIN))     # 大幅上移頂邊界
+    plot_y0 = int(FIG_H_PX * (1 - TOP_MARGIN))
     plot_y1 = int(FIG_H_PX * (1 - BOTTOM_MARGIN))
 
     def val_to_px(val_x, val_y):
@@ -120,7 +120,7 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     v_base = selected_cfg["voltage"]
     v_base_str = f"{v_base/1000:g}kV" if v_base >= 1000 else f"{int(v_base)}V"
 
-    # 2. 放大繪製頂部標題文字
+    # 2. 繪製頂部標題文字
     draw.text((plot_x0, 2), "Schneider Electric (Taiwan)", fill="#000000", font=FONT_TITLE)
     draw.text((plot_x1 - 150, 2), f"Base Voltage : {v_base_str}", fill="#D90429", font=FONT_TITLE)
 
@@ -228,7 +228,11 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
 def main(page: ft.Page):
     page.title = "保護協調曲線 (Schneider Electric)"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 6
+    
+    # 🎯 調整頁面 padding：將上方 padding 增加至 35，避開手機狀態列
+    page.padding = 5 #6
+    #page.padding_top = 70  # 單獨把頂部拉開 35px 避開狀態列
+    
     page.spacing = 6
     page.window.width = 480
     page.window.height = 820
@@ -246,7 +250,7 @@ def main(page: ft.Page):
 
     current_selected_index = [0]
 
-    # 浮動數據卡片 (直接調整定位進入 PIL 的右上角框內)
+    # 浮動數據卡片
     hover_I_val_text = ft.Text("", size=9, weight=ft.FontWeight.BOLD, color="#1D3557")
     hover_details_column = ft.Column(spacing=1)
 
@@ -272,7 +276,7 @@ def main(page: ft.Page):
         border_radius=5,
         shadow=ft.BoxShadow(spread_radius=1, blur_radius=4, color="black12"),
         visible=False,
-        top=32,   # 浮動卡片下壓，完美融入上移後的 PIL 網格區域
+        top=32,
         right=30,
         width=130,
     )
@@ -539,9 +543,13 @@ def main(page: ft.Page):
         expand=True,
     )
 
+    # 建立一個頂部間距元件 (避開狀態列)
+    top_status_bar_spacer = ft.Container(height=15)
+    
     page.add(
         ft.Column(
             controls=[
+                top_status_bar_spacer,  # 👈 放在最頂部，硬性留下 35px 空間
                 top_chart_panel,
                 bottom_setting_panel,
             ],
