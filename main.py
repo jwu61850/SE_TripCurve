@@ -229,10 +229,7 @@ def main(page: ft.Page):
     page.title = "保護協調曲線 (Schneider Electric)"
     page.theme_mode = ft.ThemeMode.LIGHT
     
-    # 🎯 調整頁面 padding：將上方 padding 增加至 35，避開手機狀態列
-    page.padding = 5 #6
-    #page.padding_top = 70  # 單獨把頂部拉開 35px 避開狀態列
-    
+    page.padding = 5 #6  
     page.spacing = 6
     page.window.width = 480
     page.window.height = 820
@@ -283,6 +280,15 @@ def main(page: ft.Page):
 
     chart_image = ft.Image(src="", fit="fill", width=FIG_W_PX, height=FIG_H_PX)
     chart_stack = ft.Stack(controls=[chart_image, hover_card], width=FIG_W_PX, height=FIG_H_PX)
+    
+    # Zoom In/Zoom Out 功能,將圖表區塊放入 InteractiveViewer 容器
+    chart_interactive = ft.InteractiveViewer(
+    content=chart_stack,
+    min_scale=1.0,  # 最小縮放倍率 (預設原圖大小)
+    max_scale=4.0,  # 最大縮放倍率 (可放大 4 倍)
+    boundary_margin=ft.Margin.all(20), #ft.Margin(20, 20, 20, 20), # 允許超出邊界的緩衝距離
+    clip_behavior=ft.ClipBehavior.HARD_EDGE, # 避免放大後超出 Container 邊框
+    )
 
     def update_hover_card(current_A):
         if current_A is None or current_A < 10.0 or current_A > 100000.0:
@@ -504,7 +510,8 @@ def main(page: ft.Page):
     top_chart_panel = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Container(content=chart_stack, alignment=ft.Alignment(0, 0)),
+                #ft.Container(content=chart_stack, alignment=ft.Alignment(0, 0)),
+                ft.Container(content=chart_interactive, alignment=ft.Alignment(0, 0)),
                 test_panel,
                 ft.Row(
                     controls=[
@@ -544,7 +551,7 @@ def main(page: ft.Page):
     )
 
     # 建立一個頂部間距元件 (避開狀態列)
-    top_status_bar_spacer = ft.Container(height=15)
+    top_status_bar_spacer = ft.Container(height=25)
     
     page.add(
         ft.Column(
