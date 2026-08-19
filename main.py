@@ -24,7 +24,6 @@ CURVE_FAMILY_MAP = {
     "IEEE2": ["MI", "NI", "VI", "EI"]
 }
 
-FIG_W_PX, FIG_H_PX = 500, 320
 LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95
 TOP_MARGIN, BOTTOM_MARGIN = 0.92, 0.12
 
@@ -91,10 +90,10 @@ def calc_trip_time(standard, curve_type, I_base, Ip_base, TMS_TD, enable_51, ena
     return t
 
 # -----------------------------------------------------------------------------
-# PIL 底圖繪製引擎
+# PIL 底圖繪製引擎 (支援動態寬高)
 # -----------------------------------------------------------------------------
-def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_current=None):
-    img = Image.new("RGB", (FIG_W_PX, FIG_H_PX), "white")
+def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_current=None, fig_w=500, fig_h=320):
+    img = Image.new("RGB", (fig_w, fig_h), "white")
     draw = ImageDraw.Draw(img)
 
     x_min, x_max = 10.0, 100000.0
@@ -103,10 +102,10 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     log_x_min, log_x_max = math.log10(x_min), math.log10(x_max)
     log_y_min, log_y_max = math.log10(y_min), math.log10(y_max)
 
-    plot_x0 = int(FIG_W_PX * LEFT_MARGIN)
-    plot_x1 = int(FIG_W_PX * RIGHT_MARGIN)
-    plot_y0 = int(FIG_H_PX * (1 - TOP_MARGIN))
-    plot_y1 = int(FIG_H_PX * (1 - BOTTOM_MARGIN))
+    plot_x0 = int(fig_w * LEFT_MARGIN)
+    plot_x1 = int(fig_w * RIGHT_MARGIN)
+    plot_y0 = int(fig_h * (1 - TOP_MARGIN))
+    plot_y1 = int(fig_h * (1 - BOTTOM_MARGIN))
 
     def val_to_px(val_x, val_y):
         lx = math.log10(max(val_x, x_min))
@@ -214,8 +213,8 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
                 draw.ellipse([px_test - r, py - r, px_test + r, py + r], fill=default_colors[i], outline="white")
                 draw.text((px_test + 4, py - 5), f"{t_val:.3f}s", fill=default_colors[i], font=FONT_SMALL)
 
-    # 6. X 軸標題
-    draw.text((plot_x0 + 130, plot_y1 + 16), "Current (A)", fill="#333333", font=FONT_LABEL)
+    # 6. X 軸標題 (動態計算居中)
+    draw.text((plot_x0 + (plot_x1 - plot_x0) // 2 - 30, plot_y1 + 16), "Current (A)", fill="#333333", font=FONT_LABEL)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -229,7 +228,7 @@ def main(page: ft.Page):
     page.title = "保護協調曲線 (Schneider Electric)"
     page.theme_mode = ft.ThemeMode.LIGHT
     
-    page.padding = 5 #6  
+    page.padding = 5 
     page.spacing = 6
     page.window.width = 480
     page.window.height = 820
@@ -246,6 +245,9 @@ def main(page: ft.Page):
     ]
 
     current_selected_index = [0]
+
+    # 🎯 動態圖表尺寸控制變數
+    chart_dim = {"w": 460, "h": 300}
 
     # 浮動數據卡片
     hover_I_val_text = ft.Text("", size=9, weight=ft.FontWeight.BOLD, color="#1D3557")
@@ -278,16 +280,16 @@ def main(page: ft.Page):
         width=130,
     )
 
-    chart_image = ft.Image(src="", fit="fill", width=FIG_W_PX, height=FIG_H_PX)
-    chart_stack = ft.Stack(controls=[chart_image, hover_card], width=FIG_W_PX, height=FIG_H_PX)
+    chart_image = ft.Image(src="", fit="fill")
+    chart_stack = ft.Stack(controls=[chart_image, hover_card])
     
-    # Zoom In/Zoom Out 功能,將圖表區塊放入 InteractiveViewer 容器
+    # Zoom In/Zoom Out 功能
     chart_interactive = ft.InteractiveViewer(
-    content=chart_stack,
-    min_scale=1.0,  # 最小縮放倍率 (預設原圖大小)
-    max_scale=4.0,  # 最大縮放倍率 (可放大 4 倍)
-    boundary_margin=ft.Margin.all(20), #ft.Margin(20, 20, 20, 20), # 允許超出邊界的緩衝距離
-    clip_behavior=ft.ClipBehavior.HARD_EDGE, # 避免放大後超出 Container 邊框
+        content=chart_stack,
+        min_scale=1.0,
+        max_scale=6.0,
+        boundary_margin=ft.Margin.all(20),
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
 
     def update_hover_card(current_A):
@@ -369,10 +371,17 @@ def main(page: ft.Page):
         tf_test_result.value = "不動作" if np.isnan(t_val) else f"{t_val:.3f}"
 
     def redraw_pil_chart(current_i=None):
+        chart_image.width = chart_dim["w"]
+        chart_image.height = chart_dim["h"]
+        chart_stack.width = chart_dim["w"]
+        chart_stack.height = chart_dim["h"]
+
         chart_image.src = render_trip_curve_pil(
             stage_configs, default_colors, 
             selected_idx=current_selected_index[0], 
-            test_current=current_i
+            test_current=current_i,
+            fig_w=chart_dim["w"],
+            fig_h=chart_dim["h"]
         )
 
     # Slider 事件
@@ -490,6 +499,31 @@ def main(page: ft.Page):
     tf_inst_ip.on_change = update_all_and_redraw
     tf_inst_time.on_change = update_all_and_redraw
 
+    # 🎯 螢幕旋轉/尺寸改變時觸發的回呼函式
+    def on_page_resize(e):
+        pw = page.width if page.width else 480
+        ph = page.height if page.height else 820
+        
+        # 扣除 margin 緩衝
+        new_w = max(int(pw - 20), 300)
+        
+        # 判斷橫向或直向，分配圖表高度
+        if pw > ph: # 橫向模式 (Landscape)
+            new_h = max(int(ph * 0.60), 250)
+        else:       # 直向模式 (Portrait)
+            new_h = max(int(ph * 0.38), 280)
+
+        chart_dim["w"] = new_w
+        chart_dim["h"] = new_h
+
+        try: cur_i = float(tf_test_I.value.strip())
+        except ValueError: cur_i = None
+
+        redraw_pil_chart(current_i=cur_i)
+        page.update()
+
+    page.on_resized = on_page_resize
+
     load_loop_data(0)
 
     # 電流測試區塊
@@ -510,7 +544,6 @@ def main(page: ft.Page):
     top_chart_panel = ft.Container(
         content=ft.Column(
             controls=[
-                #ft.Container(content=chart_stack, alignment=ft.Alignment(0, 0)),
                 ft.Container(content=chart_interactive, alignment=ft.Alignment(0, 0)),
                 test_panel,
                 ft.Row(
@@ -550,13 +583,12 @@ def main(page: ft.Page):
         expand=True,
     )
 
-    # 建立一個頂部間距元件 (避開狀態列)
     top_status_bar_spacer = ft.Container(height=25)
     
     page.add(
         ft.Column(
             controls=[
-                top_status_bar_spacer,  # 👈 放在最頂部，硬性留下 35px 空間
+                top_status_bar_spacer,
                 top_chart_panel,
                 bottom_setting_panel,
             ],
