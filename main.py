@@ -26,7 +26,17 @@ CURVE_FAMILY_MAP = {
 
 FIG_W_PX, FIG_H_PX = 500, 320
 LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95
-TOP_MARGIN, BOTTOM_MARGIN = 0.88, 0.14
+TOP_MARGIN, BOTTOM_MARGIN = 0.92, 0.12  # 大幅向上延伸圖表 (TOP_MARGIN 改為 0.92)
+
+# 載入字體 (若無向量字體則改用預設)
+try:
+    FONT_TITLE = ImageFont.truetype("arial.ttf", 14)
+    FONT_LABEL = ImageFont.truetype("arial.ttf", 10)
+    FONT_SMALL = ImageFont.truetype("arial.ttf", 9)
+except IOError:
+    FONT_TITLE = ImageFont.load_default()
+    FONT_LABEL = ImageFont.load_default()
+    FONT_SMALL = ImageFont.load_default()
 
 # -----------------------------------------------------------------------------
 # 跳脫時間計算邏輯
@@ -81,12 +91,11 @@ def calc_trip_time(standard, curve_type, I_base, Ip_base, TMS_TD, enable_51, ena
     return t
 
 # -----------------------------------------------------------------------------
-# PIL 底圖繪製引擎 (僅在確定電流時繪製單一虛線)
+# PIL 底圖繪製引擎
 # -----------------------------------------------------------------------------
-def render_trip_curve_pil(stage_configs, default_colors, test_current=None):
+def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_current=None):
     img = Image.new("RGB", (FIG_W_PX, FIG_H_PX), "white")
     draw = ImageDraw.Draw(img)
-    font = ImageFont.load_default()
 
     x_min, x_max = 10.0, 100000.0
     y_min, y_max = 0.001, 360.0
@@ -96,7 +105,7 @@ def render_trip_curve_pil(stage_configs, default_colors, test_current=None):
 
     plot_x0 = int(FIG_W_PX * LEFT_MARGIN)
     plot_x1 = int(FIG_W_PX * RIGHT_MARGIN)
-    plot_y0 = int(FIG_H_PX * (1 - TOP_MARGIN))
+    plot_y0 = int(FIG_H_PX * (1 - TOP_MARGIN))     # 大幅上移頂邊界
     plot_y1 = int(FIG_H_PX * (1 - BOTTOM_MARGIN))
 
     def val_to_px(val_x, val_y):
@@ -106,7 +115,16 @@ def render_trip_curve_pil(stage_configs, default_colors, test_current=None):
         py = plot_y1 - (ly - log_y_min) / (log_y_max - log_y_min) * (plot_y1 - plot_y0)
         return px, py
 
-    # 繪製外框
+    # 1. 選擇迴路的電壓為 Base Voltage
+    selected_cfg = stage_configs[selected_idx]
+    v_base = selected_cfg["voltage"]
+    v_base_str = f"{v_base/1000:g}kV" if v_base >= 1000 else f"{int(v_base)}V"
+
+    # 2. 放大繪製頂部標題文字
+    draw.text((plot_x0, 2), "Schneider Electric (Taiwan)", fill="#000000", font=FONT_TITLE)
+    draw.text((plot_x1 - 150, 2), f"Base Voltage : {v_base_str}", fill="#D90429", font=FONT_TITLE)
+
+    # 3. 繪製外框
     draw.rectangle([plot_x0, plot_y0, plot_x1, plot_y1], outline="#333333", width=1)
 
     # 網格線 X
@@ -120,24 +138,18 @@ def render_trip_curve_pil(stage_configs, default_colors, test_current=None):
             draw.line([(px, plot_y0), (px, plot_y1)], fill="#E0E0E0" if not is_major else "#B0BEC5", width=1)
             if is_major and px <= plot_x1:
                 label = f"{int(v)}" if v < 1000 else f"{int(v//1000)}k"
-                draw.text((px - 8, plot_y1 + 4), label, fill="#333333", font=font)
+                draw.text((px - 8, plot_y1 + 4), label, fill="#333333", font=FONT_LABEL)
 
     # 網格線 Y
     y_ticks = [0.001, 0.01, 0.1, 1, 10, 100]
     for y_val in y_ticks:
         _, py = val_to_px(x_min, y_val)
         draw.line([(plot_x0, py), (plot_x1, py)], fill="#B0BEC5", width=1)
-        draw.text((plot_x0 - 32, py - 6), f"{y_val:g}", fill="#333333", font=font)
-
-    # 基準電壓
-    active_voltages = [cfg["voltage"] for cfg in stage_configs if cfg["enable_51"] or cfg["enable_50"]]
-    v_base = max(active_voltages) if active_voltages else 161000.0
-    v_base_kv = f"{v_base/1000:.2f}kV" if v_base >= 1000 else f"{int(v_base)}V"
+        draw.text((plot_x0 - 32, py - 6), f"{y_val:g}", fill="#333333", font=FONT_LABEL)
 
     I_base_range = np.logspace(np.log10(x_min), np.log10(x_max), 600)
-    legend_items = []
 
-    # 繪製保護曲線
+    # 4. 繪製保護曲線
     for i, config in enumerate(stage_configs):
         if not config["enable_51"] and not config["enable_50"]:
             continue
@@ -173,20 +185,15 @@ def render_trip_curve_pil(stage_configs, default_colors, test_current=None):
         if len(pts) > 1:
             draw.line(pts, fill=default_colors[i], width=2)
 
-        v_str = f"{config['voltage']/1000:.1f}kV" if config['voltage'] >= 1000 else f"{int(config['voltage'])}V"
-        legend_items.append((f"{config['name']} ({v_str})", default_colors[i]))
-
-    # 單一 PIL 虛線與數值標記繪製 (放開 Slider 或 TextField 輸入時觸發)
+    # 5. 電流測試虛線與數據標籤
     if test_current is not None and x_min <= test_current <= x_max:
         px_test, _ = val_to_px(test_current, y_min)
         
-        # 繪製單一紅色虛線
         y_start, y_end = plot_y0, plot_y1
         dash_len = 4
         for y in range(y_start, y_end, dash_len * 2):
             draw.line([(px_test, y), (px_test, min(y + dash_len, y_end))], fill="#E63946", width=2)
 
-        # 繪製與各條曲線相交的圓點標籤
         for i, config in enumerate(stage_configs):
             if not config["enable_51"] and not config["enable_50"]:
                 continue
@@ -205,17 +212,10 @@ def render_trip_curve_pil(stage_configs, default_colors, test_current=None):
                 _, py = val_to_px(test_current, t_val)
                 r = 3
                 draw.ellipse([px_test - r, py - r, px_test + r, py + r], fill=default_colors[i], outline="white")
-                draw.text((px_test + 4, py - 5), f"{t_val:.3f}s", fill=default_colors[i], font=font)
+                draw.text((px_test + 4, py - 5), f"{t_val:.3f}s", fill=default_colors[i], font=FONT_SMALL)
 
-    # 繪製 X 軸說明文字與圖例
-    draw.text((plot_x0 + 60, plot_y1 + 22), f"Current (A) [Reflected to {v_base_kv}]", fill="#333333", font=font)
-
-    leg_x = plot_x1 - 105
-    leg_y = plot_y0 + 10
-    for name, color in legend_items:
-        draw.rectangle([leg_x, leg_y + 2, leg_x + 10, leg_y + 8], fill=color)
-        draw.text((leg_x + 14, leg_y - 1), name, fill="#222222", font=font)
-        leg_y += 12
+    # 6. X 軸標題
+    draw.text((plot_x0 + 130, plot_y1 + 16), "Current (A)", fill="#333333", font=FONT_LABEL)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -246,7 +246,7 @@ def main(page: ft.Page):
 
     current_selected_index = [0]
 
-    # Flet 數據浮動卡片 (靜態顯示於圖表右上角)
+    # 浮動數據卡片 (直接調整定位進入 PIL 的右上角框內)
     hover_I_val_text = ft.Text("", size=9, weight=ft.FontWeight.BOLD, color="#1D3557")
     hover_details_column = ft.Column(spacing=1)
 
@@ -272,13 +272,12 @@ def main(page: ft.Page):
         border_radius=5,
         shadow=ft.BoxShadow(spread_radius=1, blur_radius=4, color="black12"),
         visible=False,
-        top=42,
-        right=25,
-        width=125,
+        top=32,   # 浮動卡片下壓，完美融入上移後的 PIL 網格區域
+        right=30,
+        width=130,
     )
 
     chart_image = ft.Image(src="", fit="fill", width=FIG_W_PX, height=FIG_H_PX)
-    # 純靜態圖表 Stack (不添加 GestureDetector 或 Hover 事件)
     chart_stack = ft.Stack(controls=[chart_image, hover_card], width=FIG_W_PX, height=FIG_H_PX)
 
     def update_hover_card(current_A):
@@ -286,8 +285,7 @@ def main(page: ft.Page):
             hover_card.visible = False
             return
 
-        active_voltages = [cfg["voltage"] for cfg in stage_configs if cfg["enable_51"] or cfg["enable_50"]]
-        v_base = max(active_voltages) if active_voltages else 161000.0
+        v_base = stage_configs[current_selected_index[0]]["voltage"]
 
         hover_I_val_text.value = f"{current_A:,.1f} A"
         hover_details_column.controls.clear()
@@ -343,8 +341,7 @@ def main(page: ft.Page):
     def update_single_test_result_text(test_i):
         idx = current_selected_index[0]
         cfg = stage_configs[idx]
-        active_voltages = [c["voltage"] for c in stage_configs if c["enable_51"] or c["enable_50"]]
-        v_base = max(active_voltages) if active_voltages else 161000.0
+        v_base = cfg["voltage"]
 
         if test_i is None or test_i <= 0:
             tf_test_result.value = "-"
@@ -362,9 +359,13 @@ def main(page: ft.Page):
         tf_test_result.value = "不動作" if np.isnan(t_val) else f"{t_val:.3f}"
 
     def redraw_pil_chart(current_i=None):
-        chart_image.src = render_trip_curve_pil(stage_configs, default_colors, test_current=current_i)
+        chart_image.src = render_trip_curve_pil(
+            stage_configs, default_colors, 
+            selected_idx=current_selected_index[0], 
+            test_current=current_i
+        )
 
-    # 1. Slider 滑動中：僅更新 UI 數據與卡片 (不重畫 PIL 底圖)
+    # Slider 事件
     def on_slider_change(e):
         val_I = 10 ** e.control.value
         tf_test_I.value = f"{val_I:.1f}"
@@ -372,7 +373,6 @@ def main(page: ft.Page):
         update_hover_card(val_I)
         page.update()
 
-    # 2. Slider 放開後：重畫 PIL 底圖並顯示紅色虛線
     def on_slider_change_end(e):
         val_I = 10 ** e.control.value
         redraw_pil_chart(current_i=val_I)
@@ -386,7 +386,7 @@ def main(page: ft.Page):
         expand=True
     )
 
-    # 3. TextField 電流手動輸入改變時
+    # TextField 輸入事件
     def on_test_I_input_change(e):
         try:
             val = float(tf_test_I.value.strip())
@@ -482,7 +482,7 @@ def main(page: ft.Page):
 
     load_loop_data(0)
 
-    # 🎯 電流測試試算區塊 (位於圖表與 Slider 之間)
+    # 電流測試區塊
     test_panel = ft.Container(
         content=ft.Column(
             controls=[
@@ -496,11 +496,10 @@ def main(page: ft.Page):
         border_radius=6,
     )
 
-    # 上半部圖表區塊
+    # 圖表區塊
     top_chart_panel = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text("Schneider Electric (Taiwan)", size=14, weight=ft.FontWeight.BOLD, color="#111111"),
                 ft.Container(content=chart_stack, alignment=ft.Alignment(0, 0)),
                 test_panel,
                 ft.Row(
@@ -519,7 +518,7 @@ def main(page: ft.Page):
         padding=4
     )
 
-    # 下半部參數設定區塊
+    # 參數設定區塊
     bottom_setting_panel = ft.Container(
         content=ft.Column(
             controls=[
