@@ -1,15 +1,29 @@
 import base64
 import io
 import math
+import platform
+import sys
 import numpy as np
 import flet as ft
 from PIL import Image, ImageDraw, ImageFont
 
 # -----------------------------------------------------------------------------
-# 【修正問題 1】跨平台字型直接設定（不用硬編碼路徑、不上網下載、不退回預設硬字體）
+# 跨平台裝置判斷
+# -----------------------------------------------------------------------------
+def is_mobile():
+    """判斷當前是否在手機/行動裝置上執行"""
+    if hasattr(sys, "getandroidapilevel") or "android" in sys.platform.lower():
+        return True
+    if sys.platform in ["ios", "darwin"] and (
+        "iPhone" in platform.machine() or "iPad" in platform.machine()
+    ):
+        return True
+    return False
+
+# -----------------------------------------------------------------------------
+# 字型載入
 # -----------------------------------------------------------------------------
 def get_font(font_size):
-    # 依序嘗試載入系統內建字型名稱 (包含 Windows、Android、iOS 常見字體)
     font_candidates = [
         "msjh.ttc",              # Windows 微軟正黑體
         "msjh",                  # Windows 別名
@@ -45,17 +59,13 @@ CURVE_FAMILY_MAP = {
     "IEEE2": ["MI", "NI", "VI", "EI"]
 }
 
-# 預留邊界空間
-#LEFT_MARGIN, RIGHT_MARGIN = 0.15, 0.95
-#TOP_MARGIN, BOTTOM_MARGIN = 0.86, 0.16
+# 預留邊界空間 (預留足夠空間給標題與 X/Y 軸文字，防止重疊)
+#LEFT_MARGIN, RIGHT_MARGIN = 0.16, 0.94
+#TOP_MARGIN, BOTTOM_MARGIN = 0.78, 0.20
 
 # 改成這樣 (增加左、下、上的留白)：
 LEFT_MARGIN, RIGHT_MARGIN = 0.06, 0.94 #0.18, 0.94
 TOP_MARGIN, BOTTOM_MARGIN = 0.84, 0.12#0.82, 0.22
-  
-
-
-
 
 # -----------------------------------------------------------------------------
 # 跳脫時間計算邏輯
@@ -119,18 +129,19 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     img = Image.new("RGB", (draw_w, draw_h), "white")
     draw = ImageDraw.Draw(img)
 
-    # 【調降字級比例】讓文字適中不重疊
-    #font_title = get_font(int(draw_w * 0.022))   # 標題 (原 0.032 縮小)
-    #font_label = get_font(int(draw_w * 0.016))   # 軸線刻度文字 (原 0.024 縮小)
-    #font_small = get_font(int(draw_w * 0.014))   # 數值標記 (原 0.020 縮小)
-    
-    font_title = get_font(int(draw_w * 0.018))  # 原 0.022
-    font_label = get_font(int(draw_w * 0.012))  # 原 0.016
-    font_small = get_font(int(draw_w * 0.010))  # 原 0.014
-    
-    
-    
-    
+    # 根據是否為手機動態調整字型比例
+    if is_mobile():
+        title_scale = 0.026
+        label_scale = 0.018
+        small_scale = 0.014
+    else:
+        title_scale = 0.018
+        label_scale = 0.012
+        small_scale = 0.010
+
+    font_title = get_font(int(draw_w * title_scale))
+    font_label = get_font(int(draw_w * label_scale))
+    font_small = get_font(int(draw_w * small_scale))
 
     x_min, x_max = 10.0, 100000.0
     y_min, y_max = 0.001, 360.0
@@ -154,13 +165,13 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     v_base = selected_cfg["voltage"]
     v_base_str = f"{v_base/1000:g}kV" if v_base >= 1000 else f"{int(v_base)}V"
 
-    # 【調整標題高度】避免標題壓到圖表外框
-    title_y_pos = max(plot_y0 - int(32 * scale), int(4 * scale))
+    # 調整標題高度，確保推高不壓頂部圖表線 (plot_y0)
+    title_y_pos = max(plot_y0 - int(38 * scale), int(4 * scale))
     
     draw.text((plot_x0, title_y_pos), "Schneider Electric (Taiwan)", fill="#000000", font=font_title)
     
     base_v_text = f"Base Voltage : {v_base_str}"
-    draw.text((plot_x1 - int(draw_w * 0.25), title_y_pos), base_v_text, fill="#D90429", font=font_title)
+    draw.text((plot_x1 - int(draw_w * 0.28), title_y_pos), base_v_text, fill="#D90429", font=font_title)
 
     draw.rectangle([plot_x0, plot_y0, plot_x1, plot_y1], outline="#333333", width=int(1.5 * scale))
 
@@ -175,24 +186,19 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
             draw.line([(px, plot_y0), (px, plot_y1)], fill="#E0E0E0" if not is_major else "#B0BEC5", width=int(1 * scale))
             if is_major and px <= plot_x1:
                 label = f"{int(v)}" if v < 1000 else f"{int(v//1000)}k"
-                # 微調刻度文字位置 offset
                 draw.text((px - int(8 * scale), plot_y1 + int(4 * scale)), label, fill="#333333", font=font_label)
 
-    # Y 軸刻度文字
+    # Y 軸刻度文字 (增加左移 offset 防止遮擋邊界)
     y_ticks = [0.001, 0.01, 0.1, 1, 10, 100]
     for y_val in y_ticks:
         _, py = val_to_px(x_min, y_val)
         draw.line([(plot_x0, py), (plot_x1, py)], fill="#B0BEC5", width=int(1 * scale))
-        # (B) 搜尋 Y 軸繪製文字那行 (y_ticks 迴圈內)
-        # 原本：draw.text((plot_x0 - int(38 * scale), py - int(6 * scale)), ...)
-        # 改成 (加大左移 offset，例如改為 50)：
         draw.text(
             (plot_x0 - int(50 * scale), py - int(6 * scale)),
             f"{y_val:g}",
             fill="#333333",
             font=font_label,
         )
-
 
     I_base_range = np.logspace(np.log10(x_min), np.log10(x_max), 600)
 
@@ -324,6 +330,7 @@ def main(page: ft.Page):
         width=130,
     )
 
+    # 改為 CONTAIN 避免圖片被拉伸擠壓
     chart_image = ft.Image(src="", fit="fill")
     chart_stack = ft.Stack(controls=[chart_image, hover_card])
 
@@ -560,7 +567,6 @@ def main(page: ft.Page):
         border_radius=6,
     )
 
-    # 【修正問題 2】加上 expand=True 讓頂部面板寬度可隨著螢幕拉滿
     top_chart_panel = ft.Container(
         content=ft.Column(
             controls=[
@@ -606,23 +612,17 @@ def main(page: ft.Page):
         expand=True
     )
 
-    # -----------------------------------------------------------------------------
-    # 【修正問題 2】手機橫向時動態計算繪製寬高並解鎖容器限制
-    # -----------------------------------------------------------------------------
     def on_page_resize(e):
         pw = page.width if page.width else 360
         ph = page.height if page.height else 800
 
         is_landscape = pw > ph
         
-        # 扣除左右邊界，取得全寬
         new_w = max(int(pw - 24), 280)
 
         if is_landscape:
-            # 橫屏模式下高度依螢幕高度動態拿 50%~60%，寬度徹底拉滿
             new_h = min(int(ph * 0.55), int(new_w * 0.48))
         else:
-            # 直屏模式下保持傳統黃金黃寬高比
             new_h = min(int(new_w / 1.35), 260)
 
         chart_dim["w"] = new_w
