@@ -5,7 +5,7 @@ import numpy as np
 import flet as ft
 from PIL import Image, ImageDraw, ImageFont
 
-# --- 放置在此處 (取代原本舊的 try...except ImageFont 區塊) ---
+# --- 字體載入設定 ---
 FONT_PATH = "C:/Windows/Fonts/msjh.ttc"  # 微軟正黑體 (Windows) 或是 "arial.ttf"
 
 def get_font(size):
@@ -13,8 +13,6 @@ def get_font(size):
         return ImageFont.truetype(FONT_PATH, size)
     except IOError:
         return ImageFont.load_default()
-# --------------------------------------------------------
-
 
 # 標記電壓選項
 VOLTAGE_OPTIONS = [
@@ -35,22 +33,9 @@ CURVE_FAMILY_MAP = {
     "IEEE2": ["MI", "NI", "VI", "EI"]
 }
 
-
-# 稍微增加邊界留白空間
-LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95   # 左右邊界
-TOP_MARGIN, BOTTOM_MARGIN = 0.84, 0.16   # 上下邊界（稍微收緊上下留白））
-#LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95
-#TOP_MARGIN, BOTTOM_MARGIN = 0.92, 0.12
-
-# 載入字體
-#try:
-#    FONT_TITLE = ImageFont.truetype("arial.ttf", 16)
-#    FONT_LABEL = ImageFont.truetype("arial.ttf", 12)
-#    FONT_SMALL = ImageFont.truetype("arial.ttf", 11)
-#except IOError:
-#    FONT_TITLE = ImageFont.load_default()
-#    FONT_LABEL = ImageFont.load_default()
-#    FONT_SMALL = ImageFont.load_default()
+# 繪圖邊界留白空間
+LEFT_MARGIN, RIGHT_MARGIN = 0.08, 0.95
+TOP_MARGIN, BOTTOM_MARGIN = 0.85, 0.10  # 調整圖表繪製邊界
 
 # -----------------------------------------------------------------------------
 # 跳脫時間計算邏輯
@@ -108,17 +93,15 @@ def calc_trip_time(standard, curve_type, I_base, Ip_base, TMS_TD, enable_51, ena
 # PIL 底圖繪製引擎
 # -----------------------------------------------------------------------------
 def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_current=None, fig_w=480, fig_h=310, scale=2):
-    # 實際繪圖解析度放大 scale 倍
     draw_w = fig_w * scale
     draw_h = fig_h * scale
     
     img = Image.new("RGB", (draw_w, draw_h), "white")
     draw = ImageDraw.Draw(img)
 
-    # --- 放置在此處 (直接呼叫 get_font 帶入乘以 scale 的字號) ---
-    font_title = get_font(int(20 * scale))  # 原本 14 -> 加大到 20
-    font_label = get_font(int(14 * scale))  # 原本 10 -> 加大到 14
-    font_small = get_font(int(12 * scale))  # 原本 9  -> 加大到 12
+    font_title = get_font(int(16 * scale))
+    font_label = get_font(int(13 * scale))
+    font_small = get_font(int(11 * scale))
 
     x_min, x_max = 10.0, 100000.0
     y_min, y_max = 0.001, 360.0
@@ -142,10 +125,10 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     v_base = selected_cfg["voltage"]
     v_base_str = f"{v_base/1000:g}kV" if v_base >= 1000 else f"{int(v_base)}V"
 
-    title_y_pos = int(14 * scale)
+    title_y_pos = max(plot_y0 - int(22 * scale), int(8 * scale))
     
     draw.text((plot_x0, title_y_pos), "Schneider Electric (Taiwan)", fill="#000000", font=font_title)
-    draw.text((plot_x1 - int(150 * scale),title_y_pos), f"Base Voltage : {v_base_str}", fill="#D90429", font=font_title)
+    draw.text((plot_x1 - int(160 * scale), title_y_pos), f"Base Voltage : {v_base_str}", fill="#D90429", font=font_title)
 
     draw.rectangle([plot_x0, plot_y0, plot_x1, plot_y1], outline="#333333", width=int(1 * scale))
 
@@ -165,7 +148,7 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     for y_val in y_ticks:
         _, py = val_to_px(x_min, y_val)
         draw.line([(plot_x0, py), (plot_x1, py)], fill="#B0BEC5", width=int(1 * scale))
-        draw.text((plot_x0 - int(32 * scale), py - int(6 * scale)), f"{y_val:g}", fill="#333333", font=font_label)
+        draw.text((plot_x0 - int(36 * scale), py - int(6 * scale)), f"{y_val:g}", fill="#333333", font=font_label)
 
     I_base_range = np.logspace(np.log10(x_min), np.log10(x_max), 600)
 
@@ -245,14 +228,13 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
 def main(page: ft.Page):
     page.title = "保護協調曲線 (Schneider Electric)"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 8
-    page.spacing = 6
+    page.padding = 0  # 設為0以配合 SafeArea
+    page.spacing = 0
 
-    # 設定電腦版桌面視窗初始寬高 (緊湊化)
     page.window.width = 530
     page.window.height = 820
-    page.window.min_width = 480
-    page.window.min_height = 600
+    page.window.min_width = 360
+    page.window.min_height = 500
     page.window.center_on_screen = True
 
     default_colors = ["#E63946", "#F4A261", "#2A9D8F", "#457B9D", "#1D3557", "#8D99AE"]
@@ -267,7 +249,7 @@ def main(page: ft.Page):
     ]
 
     current_selected_index = [0]
-    chart_dim = {"w": 480, "h": 310}
+    chart_dim = {"w": 480, "h": 300}
 
     hover_I_val_text = ft.Text("", size=9, weight=ft.FontWeight.BOLD, color="#1D3557")
     hover_details_column = ft.Column(spacing=1)
@@ -294,7 +276,7 @@ def main(page: ft.Page):
         border_radius=5,
         shadow=ft.BoxShadow(spread_radius=1, blur_radius=4, color="black12"),
         visible=False,
-        top=40,
+        top=55,
         right=30,
         width=130,
     )
@@ -302,8 +284,19 @@ def main(page: ft.Page):
     chart_image = ft.Image(src="", fit="fill")
     chart_stack = ft.Stack(controls=[chart_image, hover_card])
     
-    chart_interactive = ft.InteractiveViewer(
+    # 【新增】使用 GestureDetector 捕捉雙擊/雙擊觸控手勢
+    async def reset_chart_scale(e):
+        await chart_interactive.reset_async()  # 或在 async 函式中使用 await chart_interactive.reset()
+        page.update()
+
+    # 或是直接在 lambda 中使用 page.run_task
+    chart_gesture = ft.GestureDetector(
         content=chart_stack,
+        on_double_tap=lambda e: page.run_task(chart_interactive.reset)
+    )
+
+    chart_interactive = ft.InteractiveViewer(
+        content=chart_gesture,  # 將手勢元件包裹於 InteractiveViewer 內
         min_scale=1.0,
         max_scale=6.0,
         boundary_margin=ft.Margin.all(10),
@@ -389,7 +382,6 @@ def main(page: ft.Page):
         w = chart_dim["w"]
         h = chart_dim["h"]
 
-        # Flet 元件維持正常尺寸，不要乘以 scale
         chart_image.width = w
         chart_image.height = h
         chart_stack.width = w
@@ -397,14 +389,13 @@ def main(page: ft.Page):
         chart_interactive.width = w
         chart_interactive.height = h
 
-        # 傳入 2 倍畫布設定進行高清繪製
         chart_image.src = render_trip_curve_pil(
             stage_configs, default_colors, 
             selected_idx=current_selected_index[0], 
             test_current=current_i,
             fig_w=w,
             fig_h=h,
-            scale=2  # 畫布高清化
+            scale=2
         )
 
     def on_slider_change(e):
@@ -576,20 +567,18 @@ def main(page: ft.Page):
     )
 
     def on_page_resize(e):
-        pw = page.width if page.width else 480
-        ph = page.height if page.height else 820  # 取得視窗總高度
+        pw = page.width if page.width else 360
+        ph = page.height if page.height else 800
 
-        # 1. 寬度限制
-        new_w = max(int(pw - 20), 300)
-        
-        # 2. 微調寬高比為 1.7 (讓 Height 變小，文字就不會被垂直拉長)
-        ASPECT_RATIO = 1.7  
-        calc_h = int(new_w / ASPECT_RATIO)
+        is_landscape = pw > ph
+        new_w = max(int(pw - 16), 280)
 
-        # 3. 限制最高不能超過 320px (或視窗高度 35%)，給下方參數區預留空間
-        new_h = min(calc_h, 320)
-        
-        #new_h = max(int(ph * 0.38), 260)
+        if is_landscape:
+            new_h = min(int(pw * 0.35), int(ph * 0.5))  # 橫屏高度上限同步縮小
+        else:
+            # 直屏時：提高分母（如 1.5），高度就會按比例縮小
+            new_h = int(new_w / 1.2)  # 原本為 / 1.25
+            new_h = min(new_h, 300)   # 限制最高上限為 300px（原本為 420px）
 
         chart_dim["w"] = new_w
         chart_dim["h"] = new_h
@@ -607,15 +596,19 @@ def main(page: ft.Page):
     load_loop_data(0)
 
     page.add(
-        ft.Column(
-            controls=[
-                top_chart_panel,
-                bottom_setting_panel,
-            ],
-            spacing=6,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            scroll=ft.ScrollMode.AUTO,
-            expand=True
+        ft.SafeArea(
+            ft.Container(
+                content=ft.Column(
+                    controls=[
+                        top_chart_panel,
+                        bottom_setting_panel,
+                    ],
+                    spacing=8,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    scroll=ft.ScrollMode.AUTO,
+                ),
+                padding=ft.Padding(left=8, right=8, top=6, bottom=12)
+            )
         )
     )
 
