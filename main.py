@@ -5,6 +5,17 @@ import numpy as np
 import flet as ft
 from PIL import Image, ImageDraw, ImageFont
 
+# --- 放置在此處 (取代原本舊的 try...except ImageFont 區塊) ---
+FONT_PATH = "C:/Windows/Fonts/msjh.ttc"  # 微軟正黑體 (Windows) 或是 "arial.ttf"
+
+def get_font(size):
+    try:
+        return ImageFont.truetype(FONT_PATH, size)
+    except IOError:
+        return ImageFont.load_default()
+# --------------------------------------------------------
+
+
 # 標記電壓選項
 VOLTAGE_OPTIONS = [
     ("161", 161000.0),
@@ -24,18 +35,22 @@ CURVE_FAMILY_MAP = {
     "IEEE2": ["MI", "NI", "VI", "EI"]
 }
 
-LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95
-TOP_MARGIN, BOTTOM_MARGIN = 0.92, 0.12
 
-# 載入字體 (若無向量字體則改用預設)
-try:
-    FONT_TITLE = ImageFont.truetype("arial.ttf", 14)
-    FONT_LABEL = ImageFont.truetype("arial.ttf", 10)
-    FONT_SMALL = ImageFont.truetype("arial.ttf", 9)
-except IOError:
-    FONT_TITLE = ImageFont.load_default()
-    FONT_LABEL = ImageFont.load_default()
-    FONT_SMALL = ImageFont.load_default()
+# 稍微增加邊界留白空間
+LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95   # 左右邊界
+TOP_MARGIN, BOTTOM_MARGIN = 0.84, 0.16   # 上下邊界（稍微收緊上下留白））
+#LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95
+#TOP_MARGIN, BOTTOM_MARGIN = 0.92, 0.12
+
+# 載入字體
+#try:
+#    FONT_TITLE = ImageFont.truetype("arial.ttf", 16)
+#    FONT_LABEL = ImageFont.truetype("arial.ttf", 12)
+#    FONT_SMALL = ImageFont.truetype("arial.ttf", 11)
+#except IOError:
+#    FONT_TITLE = ImageFont.load_default()
+#    FONT_LABEL = ImageFont.load_default()
+#    FONT_SMALL = ImageFont.load_default()
 
 # -----------------------------------------------------------------------------
 # 跳脫時間計算邏輯
@@ -90,11 +105,20 @@ def calc_trip_time(standard, curve_type, I_base, Ip_base, TMS_TD, enable_51, ena
     return t
 
 # -----------------------------------------------------------------------------
-# PIL 底圖繪製引擎 (支援動態寬高)
+# PIL 底圖繪製引擎
 # -----------------------------------------------------------------------------
-def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_current=None, fig_w=500, fig_h=320):
-    img = Image.new("RGB", (fig_w, fig_h), "white")
+def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_current=None, fig_w=480, fig_h=310, scale=2):
+    # 實際繪圖解析度放大 scale 倍
+    draw_w = fig_w * scale
+    draw_h = fig_h * scale
+    
+    img = Image.new("RGB", (draw_w, draw_h), "white")
     draw = ImageDraw.Draw(img)
+
+    # --- 放置在此處 (直接呼叫 get_font 帶入乘以 scale 的字號) ---
+    font_title = get_font(int(20 * scale))  # 原本 14 -> 加大到 20
+    font_label = get_font(int(14 * scale))  # 原本 10 -> 加大到 14
+    font_small = get_font(int(12 * scale))  # 原本 9  -> 加大到 12
 
     x_min, x_max = 10.0, 100000.0
     y_min, y_max = 0.001, 360.0
@@ -102,10 +126,10 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     log_x_min, log_x_max = math.log10(x_min), math.log10(x_max)
     log_y_min, log_y_max = math.log10(y_min), math.log10(y_max)
 
-    plot_x0 = int(fig_w * LEFT_MARGIN)
-    plot_x1 = int(fig_w * RIGHT_MARGIN)
-    plot_y0 = int(fig_h * (1 - TOP_MARGIN))
-    plot_y1 = int(fig_h * (1 - BOTTOM_MARGIN))
+    plot_x0 = int(draw_w * LEFT_MARGIN)
+    plot_x1 = int(draw_w * RIGHT_MARGIN)
+    plot_y0 = int(draw_h * (1 - TOP_MARGIN))
+    plot_y1 = int(draw_h * (1 - BOTTOM_MARGIN))
 
     def val_to_px(val_x, val_y):
         lx = math.log10(max(val_x, x_min))
@@ -114,19 +138,17 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
         py = plot_y1 - (ly - log_y_min) / (log_y_max - log_y_min) * (plot_y1 - plot_y0)
         return px, py
 
-    # 1. 選擇迴路的電壓為 Base Voltage
     selected_cfg = stage_configs[selected_idx]
     v_base = selected_cfg["voltage"]
     v_base_str = f"{v_base/1000:g}kV" if v_base >= 1000 else f"{int(v_base)}V"
 
-    # 2. 繪製頂部標題文字
-    draw.text((plot_x0, 2), "Schneider Electric (Taiwan)", fill="#000000", font=FONT_TITLE)
-    draw.text((plot_x1 - 150, 2), f"Base Voltage : {v_base_str}", fill="#D90429", font=FONT_TITLE)
+    title_y_pos = int(14 * scale)
+    
+    draw.text((plot_x0, title_y_pos), "Schneider Electric (Taiwan)", fill="#000000", font=font_title)
+    draw.text((plot_x1 - int(150 * scale),title_y_pos), f"Base Voltage : {v_base_str}", fill="#D90429", font=font_title)
 
-    # 3. 繪製外框
-    draw.rectangle([plot_x0, plot_y0, plot_x1, plot_y1], outline="#333333", width=1)
+    draw.rectangle([plot_x0, plot_y0, plot_x1, plot_y1], outline="#333333", width=int(1 * scale))
 
-    # 網格線 X
     for dec in range(1, 6):
         base_val = 10**dec
         for sub in range(1, 10):
@@ -134,21 +156,19 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
             if v > x_max: break
             px, _ = val_to_px(v, y_min)
             is_major = (sub == 1)
-            draw.line([(px, plot_y0), (px, plot_y1)], fill="#E0E0E0" if not is_major else "#B0BEC5", width=1)
+            draw.line([(px, plot_y0), (px, plot_y1)], fill="#E0E0E0" if not is_major else "#B0BEC5", width=int(1 * scale))
             if is_major and px <= plot_x1:
                 label = f"{int(v)}" if v < 1000 else f"{int(v//1000)}k"
-                draw.text((px - 8, plot_y1 + 4), label, fill="#333333", font=FONT_LABEL)
+                draw.text((px - int(8 * scale), plot_y1 + int(4 * scale)), label, fill="#333333", font=font_label)
 
-    # 網格線 Y
     y_ticks = [0.001, 0.01, 0.1, 1, 10, 100]
     for y_val in y_ticks:
         _, py = val_to_px(x_min, y_val)
-        draw.line([(plot_x0, py), (plot_x1, py)], fill="#B0BEC5", width=1)
-        draw.text((plot_x0 - 32, py - 6), f"{y_val:g}", fill="#333333", font=FONT_LABEL)
+        draw.line([(plot_x0, py), (plot_x1, py)], fill="#B0BEC5", width=int(1 * scale))
+        draw.text((plot_x0 - int(32 * scale), py - int(6 * scale)), f"{y_val:g}", fill="#333333", font=font_label)
 
     I_base_range = np.logspace(np.log10(x_min), np.log10(x_max), 600)
 
-    # 4. 繪製保護曲線
     for i, config in enumerate(stage_configs):
         if not config["enable_51"] and not config["enable_50"]:
             continue
@@ -182,16 +202,14 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
         pts = [val_to_px(ix, tx) for ix, tx in zip(I_curve, t_curve) if not np.isnan(tx) and y_min <= tx <= y_max]
 
         if len(pts) > 1:
-            draw.line(pts, fill=default_colors[i], width=2)
+            draw.line(pts, fill=default_colors[i], width=int(2 * scale))
 
-    # 5. 電流測試虛線與數據標籤
     if test_current is not None and x_min <= test_current <= x_max:
         px_test, _ = val_to_px(test_current, y_min)
-        
         y_start, y_end = plot_y0, plot_y1
-        dash_len = 4
+        dash_len = int(4 * scale)
         for y in range(y_start, y_end, dash_len * 2):
-            draw.line([(px_test, y), (px_test, min(y + dash_len, y_end))], fill="#E63946", width=2)
+            draw.line([(px_test, y), (px_test, min(y + dash_len, y_end))], fill="#E63946", width=int(2 * scale))
 
         for i, config in enumerate(stage_configs):
             if not config["enable_51"] and not config["enable_50"]:
@@ -209,17 +227,17 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
 
             if not np.isnan(t_val) and y_min <= t_val <= y_max:
                 _, py = val_to_px(test_current, t_val)
-                r = 3
+                r = int(3 * scale)
                 draw.ellipse([px_test - r, py - r, px_test + r, py + r], fill=default_colors[i], outline="white")
-                draw.text((px_test + 4, py - 5), f"{t_val:.3f}s", fill=default_colors[i], font=FONT_SMALL)
+                draw.text((px_test + int(4 * scale), py - int(5 * scale)), f"{t_val:.3f}s", fill=default_colors[i], font=font_small)
 
-    # 6. X 軸標題 (動態計算居中)
-    draw.text((plot_x0 + (plot_x1 - plot_x0) // 2 - 30, plot_y1 + 16), "Current (A)", fill="#333333", font=FONT_LABEL)
+    draw.text((plot_x0 + (plot_x1 - plot_x0) // 2 - int(30 * scale), plot_y1 + int(16 * scale)), "Current (A)", fill="#333333", font=font_label)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     img_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     return f"data:image/png;base64,{img_b64}"
+
 
 # -----------------------------------------------------------------------------
 # Flet 主程式
@@ -227,11 +245,15 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
 def main(page: ft.Page):
     page.title = "保護協調曲線 (Schneider Electric)"
     page.theme_mode = ft.ThemeMode.LIGHT
-    
-    page.padding = 5 
+    page.padding = 8
     page.spacing = 6
-    page.window.width = 480
+
+    # 設定電腦版桌面視窗初始寬高 (緊湊化)
+    page.window.width = 530
     page.window.height = 820
+    page.window.min_width = 480
+    page.window.min_height = 600
+    page.window.center_on_screen = True
 
     default_colors = ["#E63946", "#F4A261", "#2A9D8F", "#457B9D", "#1D3557", "#8D99AE"]
     
@@ -245,11 +267,8 @@ def main(page: ft.Page):
     ]
 
     current_selected_index = [0]
+    chart_dim = {"w": 480, "h": 310}
 
-    # 🎯 動態圖表尺寸控制變數
-    chart_dim = {"w": 460, "h": 300}
-
-    # 浮動數據卡片
     hover_I_val_text = ft.Text("", size=9, weight=ft.FontWeight.BOLD, color="#1D3557")
     hover_details_column = ft.Column(spacing=1)
 
@@ -275,7 +294,7 @@ def main(page: ft.Page):
         border_radius=5,
         shadow=ft.BoxShadow(spread_radius=1, blur_radius=4, color="black12"),
         visible=False,
-        top=32,
+        top=40,
         right=30,
         width=130,
     )
@@ -283,13 +302,13 @@ def main(page: ft.Page):
     chart_image = ft.Image(src="", fit="fill")
     chart_stack = ft.Stack(controls=[chart_image, hover_card])
     
-    # Zoom In/Zoom Out 功能
     chart_interactive = ft.InteractiveViewer(
         content=chart_stack,
         min_scale=1.0,
         max_scale=6.0,
-        boundary_margin=ft.Margin.all(20),
+        boundary_margin=ft.Margin.all(10),
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
+        expand=False,
     )
 
     def update_hover_card(current_A):
@@ -298,7 +317,6 @@ def main(page: ft.Page):
             return
 
         v_base = stage_configs[current_selected_index[0]]["voltage"]
-
         hover_I_val_text.value = f"{current_A:,.1f} A"
         hover_details_column.controls.clear()
 
@@ -331,9 +349,6 @@ def main(page: ft.Page):
             )
         hover_card.visible = True
 
-    # -------
-    # UI 元件
-    # -------
     INPUT_HEIGHT, TEXT_HEIGHT = 36, 58
     CHK_SLOT_WIDTH, TEXT_SIZE = 30, 15
     style_text_10 = ft.TextStyle(size=16)
@@ -371,20 +386,27 @@ def main(page: ft.Page):
         tf_test_result.value = "不動作" if np.isnan(t_val) else f"{t_val:.3f}"
 
     def redraw_pil_chart(current_i=None):
-        chart_image.width = chart_dim["w"]
-        chart_image.height = chart_dim["h"]
-        chart_stack.width = chart_dim["w"]
-        chart_stack.height = chart_dim["h"]
+        w = chart_dim["w"]
+        h = chart_dim["h"]
 
+        # Flet 元件維持正常尺寸，不要乘以 scale
+        chart_image.width = w
+        chart_image.height = h
+        chart_stack.width = w
+        chart_stack.height = h
+        chart_interactive.width = w
+        chart_interactive.height = h
+
+        # 傳入 2 倍畫布設定進行高清繪製
         chart_image.src = render_trip_curve_pil(
             stage_configs, default_colors, 
             selected_idx=current_selected_index[0], 
             test_current=current_i,
-            fig_w=chart_dim["w"],
-            fig_h=chart_dim["h"]
+            fig_w=w,
+            fig_h=h,
+            scale=2  # 畫布高清化
         )
 
-    # Slider 事件
     def on_slider_change(e):
         val_I = 10 ** e.control.value
         tf_test_I.value = f"{val_I:.1f}"
@@ -405,7 +427,6 @@ def main(page: ft.Page):
         expand=True
     )
 
-    # TextField 輸入事件
     def on_test_I_input_change(e):
         try:
             val = float(tf_test_I.value.strip())
@@ -421,7 +442,6 @@ def main(page: ft.Page):
 
     tf_test_I.on_change = on_test_I_input_change
 
-    # 保護設定選單 UI
     dd_loop_select = ft.Dropdown(
         label="迴路", options=[ft.dropdown.Option(key=str(i), text=cfg["name"]) for i, cfg in enumerate(stage_configs)],
         value="0", dense=True, text_size=TEXT_SIZE, label_style=style_text_10, content_padding=pad_box, height=INPUT_HEIGHT, expand=True
@@ -499,34 +519,6 @@ def main(page: ft.Page):
     tf_inst_ip.on_change = update_all_and_redraw
     tf_inst_time.on_change = update_all_and_redraw
 
-    # 🎯 螢幕旋轉/尺寸改變時觸發的回呼函式
-    def on_page_resize(e):
-        pw = page.width if page.width else 480
-        ph = page.height if page.height else 820
-        
-        # 扣除 margin 緩衝
-        new_w = max(int(pw - 20), 300)
-        
-        # 判斷橫向或直向，分配圖表高度
-        if pw > ph: # 橫向模式 (Landscape)
-            new_h = max(int(ph * 0.60), 250)
-        else:       # 直向模式 (Portrait)
-            new_h = max(int(ph * 0.38), 280)
-
-        chart_dim["w"] = new_w
-        chart_dim["h"] = new_h
-
-        try: cur_i = float(tf_test_I.value.strip())
-        except ValueError: cur_i = None
-
-        redraw_pil_chart(current_i=cur_i)
-        page.update()
-
-    page.on_resized = on_page_resize
-
-    load_loop_data(0)
-
-    # 電流測試區塊
     test_panel = ft.Container(
         content=ft.Column(
             controls=[
@@ -540,11 +532,13 @@ def main(page: ft.Page):
         border_radius=6,
     )
 
-    # 圖表區塊
     top_chart_panel = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Container(content=chart_interactive, alignment=ft.Alignment(0, 0)),
+                ft.Container(
+                    content=chart_interactive, 
+                    alignment=ft.Alignment(0, 0),
+                ),
                 test_panel,
                 ft.Row(
                     controls=[
@@ -557,12 +551,11 @@ def main(page: ft.Page):
                 )
             ],
             spacing=4,
-            horizontal_alignment=ft.CrossAxisAlignment.START
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
         ),
-        padding=4
+        padding=2
     )
 
-    # 參數設定區塊
     bottom_setting_panel = ft.Container(
         content=ft.Column(
             controls=[
@@ -579,24 +572,54 @@ def main(page: ft.Page):
         padding=8,
         border=ft.Border.all(1, "#DDDDDD"),
         border_radius=8,
-        bgcolor="#FAFAFA",
-        expand=True,
+        bgcolor="#FAFAFA"
     )
 
-    top_status_bar_spacer = ft.Container(height=25)
-    
+    def on_page_resize(e):
+        pw = page.width if page.width else 480
+        ph = page.height if page.height else 820  # 取得視窗總高度
+
+        # 1. 寬度限制
+        new_w = max(int(pw - 20), 300)
+        
+        # 2. 微調寬高比為 1.7 (讓 Height 變小，文字就不會被垂直拉長)
+        ASPECT_RATIO = 1.7  
+        calc_h = int(new_w / ASPECT_RATIO)
+
+        # 3. 限制最高不能超過 320px (或視窗高度 35%)，給下方參數區預留空間
+        new_h = min(calc_h, 320)
+        
+        #new_h = max(int(ph * 0.38), 260)
+
+        chart_dim["w"] = new_w
+        chart_dim["h"] = new_h
+
+        try:
+            cur_i = float(tf_test_I.value.strip())
+        except ValueError:
+            cur_i = None
+
+        redraw_pil_chart(current_i=cur_i)
+        page.update()
+
+    page.on_resized = on_page_resize
+
+    load_loop_data(0)
+
     page.add(
         ft.Column(
             controls=[
-                top_status_bar_spacer,
                 top_chart_panel,
                 bottom_setting_panel,
             ],
-            expand=True,
             spacing=6,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             scroll=ft.ScrollMode.AUTO,
+            expand=True
         )
     )
+
+    on_page_resize(None)
 
 if __name__ == "__main__":
     ft.run(main)
