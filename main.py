@@ -130,13 +130,13 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
 
     # 根據是否為手機動態調整字型比例
     if is_mobile():
-        title_scale = 0.078
-        label_scale = 0.054
-        small_scale = 0.042
+        title_scale = 0.234
+        label_scale = 0.162
+        small_scale = 0.126
     else:
-        title_scale = 0.018
-        label_scale = 0.012
-        small_scale = 0.010
+        title_scale = 0.016
+        label_scale = 0.013
+        small_scale = 0.011
 
     font_title = get_font(int(draw_w * title_scale))
     font_label = get_font(int(draw_w * label_scale))
@@ -330,7 +330,7 @@ def main(page: ft.Page):
     )
 
     # 改為 CONTAIN 避免圖片被拉伸擠壓
-    chart_image = ft.Image(src="", fit="fill")
+    chart_image = ft.Image(src="", fit="fill", expand=True)
     chart_stack = ft.Stack(controls=[chart_image, hover_card])
 
     chart_gesture = ft.GestureDetector(
@@ -562,6 +562,7 @@ def main(page: ft.Page):
             spacing=4,
         ),
         padding=6,
+        margin=ft.Margin(left=40),  # <--- 加上這行，數值越大越往右移 (例如 20px 或 40px)
         bgcolor="#EBF3FA",
         border_radius=6,
     )
@@ -622,17 +623,20 @@ def main(page: ft.Page):
     )
 
     def on_page_resize(e):
-        pw = page.width if page.width else 360
-        ph = page.height if page.height else 800
+        pw = page.width if page.width and page.width > 0 else 360
+        ph = page.height if page.height and page.height > 0 else 800
 
         is_landscape = pw > ph
-        
-        new_w = max(int(pw - 24), 280)
+
+        # 寬度直接滿版（減去邊距）
+        new_w = max(int(pw - 12), 280)
 
         if is_landscape:
-            new_h = min(int(ph * 0.55), int(new_w * 0.48))
+            # 橫放時：控制高度不要佔滿整個螢幕，留下空間給下方參數設定，但寬度保持滿版
+            new_h = min(int(ph * 0.50), 300)
         else:
-            new_h = min(int(new_w / 1.35), 260)
+            # 直放時：維持黃金比例
+            new_h = min(int(new_w / 1.35), 280)
 
         chart_dim["w"] = new_w
         chart_dim["h"] = new_h
