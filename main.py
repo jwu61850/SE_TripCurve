@@ -65,8 +65,7 @@ CURVE_FAMILY_MAP = {
 
 # 改成這樣 (增加左、下、上的留白)：
 LEFT_MARGIN, RIGHT_MARGIN = 0.06, 0.94 #0.18, 0.94
-TOP_MARGIN, BOTTOM_MARGIN = 0.84, 0.12#0.82, 0.22
-
+TOP_MARGIN, BOTTOM_MARGIN = 0.86, 0.12 # TOP_MARGIN larger, the upper space is lesser
 # -----------------------------------------------------------------------------
 # 跳脫時間計算邏輯
 # -----------------------------------------------------------------------------
@@ -131,9 +130,9 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
 
     # 根據是否為手機動態調整字型比例
     if is_mobile():
-        title_scale = 0.026
-        label_scale = 0.018
-        small_scale = 0.014
+        title_scale = 0.078
+        label_scale = 0.054
+        small_scale = 0.042
     else:
         title_scale = 0.018
         label_scale = 0.012
@@ -592,10 +591,20 @@ def main(page: ft.Page):
         expand=True
     )
 
+    # 建立裝置提示文字
+    device_info_str = f"📱 手機模式 ({sys.platform})" if is_mobile() else f"💻 電腦模式 ({sys.platform})"
+
     bottom_setting_panel = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text("⚡ 保護參數設定", size=12, weight=ft.FontWeight.BOLD),
+                # 將原本的 ft.Text 改為 ft.Row，把偵測結果放在右側
+                ft.Row(
+                    controls=[
+                        ft.Text("⚡ 保護參數設定", size=12, weight=ft.FontWeight.BOLD),
+                        ft.Text(f"[{device_info_str}]", size=10, color="#E63946", weight=ft.FontWeight.BOLD),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
                 ft.Row([ft.Container(width=CHK_SLOT_WIDTH), dd_loop_select, dd_voltage], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 ft.Divider(height=1, thickness=1, color="#E0E0E0"),
                 ft.Row([ft.Container(width=CHK_SLOT_WIDTH, content=chk_enable_51, alignment=ft.Alignment(0, 0)), dd_std, dd_type], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -658,6 +667,12 @@ def main(page: ft.Page):
     )
 
     on_page_resize(None)
+    
+    # 加在這裡：開啟 App 時自動顯示底欄提示
+    mode_text = "📱 行動裝置 (PIL字體已放大)" if is_mobile() else "💻 桌面電腦 (預設字體)"
+    page.snack_bar = ft.SnackBar(content=ft.Text(f"當前運行環境：{mode_text}"))
+    page.snack_bar.open = True
+    page.update()
 
 if __name__ == "__main__":
     ft.run(main)
