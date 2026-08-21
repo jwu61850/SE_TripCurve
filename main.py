@@ -13,32 +13,33 @@ from PIL import Image, ImageDraw, ImageFont
 def is_mobile():
     """判斷當前是否在手機/行動裝置上執行"""
     if hasattr(sys, "getandroidapilevel") or "android" in sys.platform.lower():
+        # 根據是否為手機動態調整字型比例
+        TITLE_SCALE = 0.234
+        LABEL_SCALE = 0.162
+        SMALL_SCALE = 0.126
         return True
     if sys.platform in ["ios", "darwin"] and (
         "iPhone" in platform.machine() or "iPad" in platform.machine()
     ):
+        TITLE_SCALE = 0.234
+        LABEL_SCALE = 0.162
+        SMALL_SCALE = 0.126
         return True
     return False
 
 # -----------------------------------------------------------------------------
 # 字型載入
 # -----------------------------------------------------------------------------
-def get_font(font_size):
-    font_candidates = [
-        "msjh.ttc",              # Windows 微軟正黑體
-        "msjh",                  # Windows 別名
-        "sans-serif",            # Android / Linux 通用無襯線字型
-        "Roboto-Regular",        # Android 標準字型
-        "Arial"                  # 通用備用
-    ]
+def get_font(size):
+    try:
+        # 確保有正確載入字型檔並傳入 size
+        return ImageFont.truetype("arial.ttf", size)
+    except Exception as e:
+        print(f"字型載入失敗: {e}")
+        # 如果失敗，不要只用 load_default()，可以嘗試 system 字型
+        return ImageFont.load_default()
     
-    for font_name in font_candidates:
-        try:
-            return ImageFont.truetype(font_name, font_size)
-        except Exception:
-            continue
-            
-    return ImageFont.load_default()
+    
 
 # 標記電壓選項
 VOLTAGE_OPTIONS = [
@@ -65,7 +66,13 @@ CURVE_FAMILY_MAP = {
 
 # 改成這樣 (增加左、下、上的留白)：
 LEFT_MARGIN, RIGHT_MARGIN = 0.06, 0.94 #0.18, 0.94
-TOP_MARGIN, BOTTOM_MARGIN = 0.86, 0.12 # TOP_MARGIN larger, the upper space is lesser
+TOP_MARGIN, BOTTOM_MARGIN = 0.82, 0.12 # TOP_MARGIN larger, the upper space is lesser
+
+#PIL Font size, below is default for Computer
+TITLE_SCALE = 0.016
+LABEL_SCALE = 0.013
+SMALL_SCALE = 0.011
+
 # -----------------------------------------------------------------------------
 # 跳脫時間計算邏輯
 # -----------------------------------------------------------------------------
@@ -128,6 +135,7 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     img = Image.new("RGB", (draw_w, draw_h), "white")
     draw = ImageDraw.Draw(img)
 
+    '''
     # 根據是否為手機動態調整字型比例
     if is_mobile():
         title_scale = 0.234
@@ -137,10 +145,11 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
         title_scale = 0.016
         label_scale = 0.013
         small_scale = 0.011
+    '''
 
-    font_title = get_font(int(draw_w * title_scale))
-    font_label = get_font(int(draw_w * label_scale))
-    font_small = get_font(int(draw_w * small_scale))
+    font_title = get_font(int(draw_w * TITLE_SCALE))
+    font_label = get_font(int(draw_w * LABEL_SCALE))
+    font_small = get_font(int(draw_w * SMALL_SCALE))
 
     x_min, x_max = 10.0, 100000.0
     y_min, y_max = 0.001, 360.0
@@ -165,7 +174,7 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     v_base_str = f"{v_base/1000:g}kV" if v_base >= 1000 else f"{int(v_base)}V"
 
     # 調整標題高度，確保推高不壓頂部圖表線 (plot_y0)
-    title_y_pos = max(plot_y0 - int(38 * scale), int(4 * scale))
+    title_y_pos = max(plot_y0 - int(35 * scale), int(4 * scale))  # 減越多，文字越往上提
     
     draw.text((plot_x0, title_y_pos), "Schneider Electric (Taiwan)", fill="#000000", font=font_title)
     
@@ -297,7 +306,7 @@ def main(page: ft.Page):
     ]
 
     current_selected_index = [0]
-    chart_dim = {"w": 480, "h": 280}
+    chart_dim = {"w": 480, "h": 380}
 
     hover_I_val_text = ft.Text("", size=9, weight=ft.FontWeight.BOLD, color="#1D3557")
     hover_details_column = ft.Column(spacing=1)
@@ -324,7 +333,7 @@ def main(page: ft.Page):
         border_radius=5,
         shadow=ft.BoxShadow(spread_radius=1, blur_radius=4, color="black12"),
         visible=False,
-        top=55,
+        top=65,
         right=30,
         width=130,
     )
@@ -344,7 +353,7 @@ def main(page: ft.Page):
         max_scale=6.0,
         boundary_margin=ft.Margin.all(10),
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
-        expand=False,
+        expand=True,
     )
 
     def update_hover_card(current_A):
@@ -623,32 +632,35 @@ def main(page: ft.Page):
     )
 
     def on_page_resize(e):
+        # 取得當前真實的視窗寬高
         pw = page.width if page.width and page.width > 0 else 360
         ph = page.height if page.height and page.height > 0 else 800
 
         is_landscape = pw > ph
 
-        # 寬度直接滿版（減去邊距）
-        new_w = max(int(pw - 12), 280)
+        # 關鍵修復：橫向與縱向都要完全吃滿寬度（減去左右邊界Padding共 12px）
+        new_w = max(int(pw - 12), 300)
 
         if is_landscape:
-            # 橫放時：控制高度不要佔滿整個螢幕，留下空間給下方參數設定，但寬度保持滿版
-            new_h = min(int(ph * 0.50), 300)
+            # 橫放時：寬度 100% 展開，高度限制為螢幕高度的 45~50%，避免遮擋下方選單
+            new_h = max(int(ph * 0.48), 180)
         else:
-            # 直放時：維持黃金比例
-            new_h = min(int(new_w / 1.35), 280)
+            # 直放時：維持原本適當的高度
+            new_h = min(int(new_w / 1.35), 300)
 
         chart_dim["w"] = new_w
         chart_dim["h"] = new_h
 
+        # 重新繪製 PIL 圖表
         try:
             cur_i = float(tf_test_I.value.strip())
-        except ValueError:
+        except (ValueError, AttributeError):
             cur_i = None
 
         redraw_pil_chart(current_i=cur_i)
         page.update()
 
+    # 綁定頁面尺寸改變事件
     page.on_resized = on_page_resize
 
     load_loop_data(0)
