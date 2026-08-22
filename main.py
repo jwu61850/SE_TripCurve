@@ -77,8 +77,8 @@ CURVE_FAMILY_MAP = {
 #TOP_MARGIN, BOTTOM_MARGIN = 0.78, 0.20
 
 # 改成這樣 (增加左、下、上的留白)：
-LEFT_MARGIN, RIGHT_MARGIN = 0.10, 0.96 #0.18, 0.94
-TOP_MARGIN, BOTTOM_MARGIN = 0.88, 0.12 # TOP_MARGIN larger, the upper space is lesser
+LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.96 #0.18, 0.94
+TOP_MARGIN, BOTTOM_MARGIN = 0.90, 0.12 # TOP_MARGIN larger, the upper space is lesser
 
 # 載入字體 (若無向量字體則改用預設)
 # PIL 上顯示的字型
