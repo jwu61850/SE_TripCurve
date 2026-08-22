@@ -77,14 +77,14 @@ CURVE_FAMILY_MAP = {
 #TOP_MARGIN, BOTTOM_MARGIN = 0.78, 0.20
 
 # 改成這樣 (增加左、下、上的留白)：
-LEFT_MARGIN, RIGHT_MARGIN = 0.06, 0.96 #0.18, 0.94
+LEFT_MARGIN, RIGHT_MARGIN = 0.10, 0.96 #0.18, 0.94
 TOP_MARGIN, BOTTOM_MARGIN = 0.82, 0.12 # TOP_MARGIN larger, the upper space is lesser
 
 # 載入字體 (若無向量字體則改用預設)
 # PIL 上顯示的字型
-FONT_TITLE = get_font(60)
-FONT_LABEL = get_font(50)
-FONT_SMALL = get_font(45)
+FONT_TITLE = get_font(40)
+FONT_LABEL = get_font(32)
+FONT_SMALL = get_font(30)
 
 # -----------------------------------------------------------------------------
 # 跳脫時間計算邏輯
@@ -201,7 +201,7 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
         _, py = val_to_px(x_min, y_val)
         draw.line([(plot_x0, py), (plot_x1, py)], fill="#B0BEC5", width=int(1 * scale))
         draw.text(
-            (plot_x0 - int(50 * scale), py - int(6 * scale)),
+            (plot_x0 - int(40 * scale), py - int(6 * scale)),
             f"{y_val:g}",
             fill="#333333",
             font=FONT_LABEL,
@@ -338,8 +338,9 @@ def main(page: ft.Page):
         border_radius=5,
         shadow=ft.BoxShadow(spread_radius=1, blur_radius=4, color="black12"),
         visible=False,
-        top=65,
-        right=30,
+        # --- 動態精準對齊設定 ---
+        top=0,      # 靠頂部對齊（後續在 on_page_resize 計算）
+        right=0,    # 靠右側對齊（後續在 on_page_resize 計算）
         width=130,
     )
 
@@ -651,66 +652,85 @@ def main(page: ft.Page):
     )
 
     def on_page_resize(e):
-            # 取得當前真實的視窗寬高
-            pw = page.width if (page.width and page.width > 0) else 360
-            ph = page.height if (page.height and page.height > 0) else 800
+            # 優先從事件 e 取得 width / height，若無則讀取 page 的寬高
+            if e and hasattr(e, "width") and e.width > 0:
+                pw = e.width
+                ph = e.height
+            else:
+                pw = page.width if (page.width and page.width > 0) else 360
+                ph = page.height if (page.height and page.height > 0) else 800
     
             is_landscape = pw > ph
-    
-            # 關鍵修復：橫向與縱向都要完全吃滿寬度（減去左右邊界Padding共 12px）
+
+            # 橫向與縱向寬度計算
             new_w = max(int(pw - 12), 300)
-    
+
             if is_landscape:
-                # 橫放時：寬度 100% 展開，高度限制為螢幕高度的 45~50%，避免遮擋下方選單
-                new_h = max(int(ph * 0.48), 180)   #0.48
+                new_h = max(int(ph * 0.48), 180)
             else:
-                # 直放時：維持原本適當的高度
                 new_h = min(int(new_w / 1.35), 300)
-    
+
             chart_dim["w"] = new_w
             chart_dim["h"] = new_h
-    
+            
+            # -------------------------------------------------------------
+            # 動態計算浮動卡片的位置 (對齊 PIL 網格右上角)
+            # -------------------------------------------------------------
+            # PIL 的頂部邊界為 (1 - TOP_MARGIN)，即 1 - 0.82 = 0.18
+            # PIL 的右側邊界為 RIGHT_MARGIN，即 0.96 (右邊留白 4%)
+            
+            offset_top = int(new_h * (1 - TOP_MARGIN)) + 2   # +2px 避免壓到圖表上邊框
+            offset_right = int(new_w * (1 - RIGHT_MARGIN)) + 2 # +2px 避免壓到圖表右邊框
+
+            hover_card.top = offset_top
+            hover_card.right = offset_right
+            
+
             # 重新繪製 PIL 圖表
             try:
                 cur_i = float(tf_test_I.value.strip())
             except (ValueError, AttributeError):
                 cur_i = None
-    
-            #redraw_pil_chart(current_i=cur_i)
+
             redraw_pil_chart(current_i=cur_i, pw=pw, ph=ph)
             page.update()
 
 
-
-    # 綁定頁面尺寸改變事件
-    page.on_resized = on_page_resize
-
-    load_loop_data(0)
-
-    page.add(
-        ft.SafeArea(
-            ft.Container(
-                content=ft.Column(
-                    controls=[
-                        top_chart_panel,
-                        bottom_setting_panel,
-                    ],
-                    spacing=8,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=ft.Padding(left=6, right=6, top=6, bottom=12)
-            )
-        )
+    # 建立主容器，並將 on_resize 綁定在此容器上
+    main_container = ft.Container(
+        content=ft.Column(
+            controls=[
+                top_chart_panel,
+                bottom_setting_panel,
+            ],
+            spacing=8,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+        padding=ft.Padding(left=6, right=6, top=6, bottom=12),
     )
 
+    page.on_resized = on_page_resize
+    
+    page.add(
+            ft.SafeArea(
+                main_container
+            )
+        )
+
+    load_loop_data(0)
     on_page_resize(None)
     
-    # 加在這裡：開啟 App 時自動顯示底欄提示
-    #mode_text = "📱 行動裝置 (PIL字體已放大)" if is_mobile() else "💻 桌面電腦 (預設字體)"
-    #page.snack_bar = ft.SnackBar(content=ft.Text(f"當前運行環境：{mode_text}"))
-    #page.snack_bar.open = True
-    #page.update()
+    # 加入背景尺寸監測 (解決 Mobile 轉向事件丟失的問題)
+    async def monitor_orientation():
+        last_w, last_h = page.width, page.height
+        while True:
+            await asyncio.sleep(0.5)
+            if page.width != last_w or page.height != last_h:
+                last_w, last_h = page.width, page.height
+                on_page_resize(None)
 
+    page.run_task(monitor_orientation)
+    
 if __name__ == "__main__":
     ft.run(main)
