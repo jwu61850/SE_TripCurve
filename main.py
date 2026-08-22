@@ -78,7 +78,7 @@ CURVE_FAMILY_MAP = {
 
 # 改成這樣 (增加左、下、上的留白)：
 LEFT_MARGIN, RIGHT_MARGIN = 0.10, 0.96 #0.18, 0.94
-TOP_MARGIN, BOTTOM_MARGIN = 0.85, 0.15 # TOP_MARGIN larger, the upper space is lesser
+TOP_MARGIN, BOTTOM_MARGIN = 0.88, 0.12 # TOP_MARGIN larger, the upper space is lesser
 
 # 載入字體 (若無向量字體則改用預設)
 # PIL 上顯示的字型
@@ -173,7 +173,7 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     v_base_str = f"{v_base/1000:g}kV" if v_base >= 1000 else f"{int(v_base)}V"
 
     # 調整標題高度，確保推高不壓頂部圖表線 (plot_y0)
-    title_y_pos = max(plot_y0 - int(35 * scale), int(4 * scale))  # 減越多，文字越往上提
+    title_y_pos = max(plot_y0 - int(20 * scale), int(4 * scale))  # 減越多，文字越往上提
     
     draw.text((plot_x0, title_y_pos), "Schneider Electric (Taiwan)", fill="#000000", font=FONT_TITLE)
     
@@ -274,7 +274,7 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     # 1. 組合 Current (A) 文字
     x_label = "Current (A)"
     if pw is not None and ph is not None:
-        x_label += f"  (pw:{pw:.1f}, ph:{ph:.1f})"
+        x_label += f"      (SCREEN : {pw:.1f}W x {ph:.1f}H)"
     
     draw.text((plot_x0 + (plot_x1 - plot_x0) // 2 - int(25 * scale), plot_y1 + int(18 * scale)), x_label, fill="#333333", font=FONT_LABEL)
     #draw.text((plot_x0 + (plot_x1 - plot_x0) // 2 - int(25 * scale), plot_y1 + int(18 * scale)), "Current (A)", fill="#333333", font=FONT_LABEL)
@@ -665,7 +665,7 @@ def main(page: ft.Page):
 
             if is_landscape:
                 # 橫向：讓圖表保持較舒適的比例 (例如寬高的 16:9 或 2:1)
-                new_h = max(int(ph * 0.90), 280)
+                new_h = max(int(ph * 0.85), 280)
                 #new_h = int(new_w / (16/9))
             else:
                 # 直向：維持原本的黃金比例
