@@ -78,7 +78,7 @@ CURVE_FAMILY_MAP = {
 
 # 改成這樣 (增加左、下、上的留白)：
 LEFT_MARGIN, RIGHT_MARGIN = 0.10, 0.96 #0.18, 0.94
-TOP_MARGIN, BOTTOM_MARGIN = 0.82, 0.12 # TOP_MARGIN larger, the upper space is lesser
+TOP_MARGIN, BOTTOM_MARGIN = 0.85, 0.15 # TOP_MARGIN larger, the upper space is lesser
 
 # 載入字體 (若無向量字體則改用預設)
 # PIL 上顯示的字型
@@ -363,7 +363,7 @@ def main(page: ft.Page):
         max_scale=6.0,
         boundary_margin=ft.Margin.all(10),
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
-        expand=True,
+        expand=False,
     )
 
     def update_hover_card(current_A):
@@ -661,11 +661,12 @@ def main(page: ft.Page):
                 ph = page.height if (page.height and page.height > 0) else 800
 
             is_landscape = pw > ph
-            new_w = max(int(pw - 12), 300)
+            new_w = max(int(pw - 16), 300)
 
             if is_landscape:
                 # 橫向：讓圖表保持較舒適的比例 (例如寬高的 16:9 或 2:1)
-                new_h = max(int(ph * 0.55), 220)
+                #new_h = max(int(ph * 0.70), 280)
+                new_h = int(new_w / (16/9))
             else:
                 # 直向：維持原本的黃金比例
                 new_h = min(int(new_w / 1.35), 320)
@@ -703,16 +704,17 @@ def main(page: ft.Page):
             ],
             spacing=12,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            scroll=ft.ScrollMode.ALWAYS,  # 強制開啟滾動
+            scroll=ft.ScrollMode.AUTO,  # 強制開啟滾動
         ),
-        padding=ft.Padding(left=6, right=6, top=6, bottom=30) # 加大底部 padding 方便滑到底
+        padding=ft.Padding(left=6, right=6, top=6, bottom=40) # 加大底部 padding 方便滑到底
       )
 
     page.on_resized = on_page_resize
     
     page.add(
             ft.SafeArea(
-                main_container
+                main_container,
+                expand=True
             )
         )
 
