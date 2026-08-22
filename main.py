@@ -665,8 +665,8 @@ def main(page: ft.Page):
 
             if is_landscape:
                 # 橫向：讓圖表保持較舒適的比例 (例如寬高的 16:9 或 2:1)
-                #new_h = max(int(ph * 0.70), 280)
-                new_h = int(new_w / (16/9))
+                new_h = max(int(ph * 0.90), 280)
+                #new_h = int(new_w / (16/9))
             else:
                 # 直向：維持原本的黃金比例
                 new_h = min(int(new_w / 1.35), 320)
