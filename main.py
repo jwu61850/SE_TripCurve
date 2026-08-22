@@ -43,12 +43,13 @@ def check_is_mobile(page: ft.Page) -> bool:
 # -----------------------------------------------------------------------------
 def get_font(size):
     try:
-        # 確保有正確載入字型檔並傳入 size
         return ImageFont.truetype("arial.ttf", size)
-    except Exception as e:
-        print(f"字型載入失敗: {e}")
-        # 如果失敗，不要只用 load_default()，可以嘗試 system 字型
-        return ImageFont.load_default()
+    except Exception:
+        # 當找不到 arial.ttf 時，改用 PIL 的預設字型
+        try:
+            return ImageFont.load_default(size=size)  # Pillow 10.1+ 支援 size 參數
+        except TypeError:
+            return ImageFont.load_default()  # 舊版 Pillow 相容備案
     
     
 
@@ -81,9 +82,9 @@ TOP_MARGIN, BOTTOM_MARGIN = 0.82, 0.12 # TOP_MARGIN larger, the upper space is l
 
 # 載入字體 (若無向量字體則改用預設)
 # PIL 上顯示的字型
-FONT_TITLE = ImageFont.truetype("arial.ttf", 60)
-FONT_LABEL = ImageFont.truetype("arial.ttf", 50)
-FONT_SMALL = ImageFont.truetype("arial.ttf", 45)
+FONT_TITLE = get_font(60)
+FONT_LABEL = get_font(50)
+FONT_SMALL = get_font(45)
 
 # -----------------------------------------------------------------------------
 # 跳脫時間計算邏輯
