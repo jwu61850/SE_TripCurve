@@ -612,7 +612,7 @@ def main(page: ft.Page):
             horizontal_alignment=ft.CrossAxisAlignment.CENTER
         ),
         padding=2,
-        expand=True
+        #expand=True
     )
 
     # 建立裝置提示文字
@@ -648,7 +648,7 @@ def main(page: ft.Page):
         border=ft.Border.all(1, "#DDDDDD"),
         border_radius=8,
         bgcolor="#FAFAFA",
-        expand=True
+        #expand=True
     )
 
     def on_page_resize(e):
@@ -659,32 +659,30 @@ def main(page: ft.Page):
             else:
                 pw = page.width if (page.width and page.width > 0) else 360
                 ph = page.height if (page.height and page.height > 0) else 800
-    
-            is_landscape = pw > ph
 
-            # 橫向與縱向寬度計算
+            is_landscape = pw > ph
             new_w = max(int(pw - 12), 300)
 
             if is_landscape:
-                new_h = max(int(ph * 0.48), 180)
+                # 橫向：讓圖表保持較舒適的比例 (例如寬高的 16:9 或 2:1)
+                new_h = max(int(ph * 0.55), 220)
             else:
-                new_h = min(int(new_w / 1.35), 300)
+                # 直向：維持原本的黃金比例
+                new_h = min(int(new_w / 1.35), 320)
 
             chart_dim["w"] = new_w
             chart_dim["h"] = new_h
-            
             # -------------------------------------------------------------
             # 動態計算浮動卡片的位置 (對齊 PIL 網格右上角)
             # -------------------------------------------------------------
             # PIL 的頂部邊界為 (1 - TOP_MARGIN)，即 1 - 0.82 = 0.18
             # PIL 的右側邊界為 RIGHT_MARGIN，即 0.96 (右邊留白 4%)
             
-            offset_top = int(new_h * (1 - TOP_MARGIN)) + 2   # +2px 避免壓到圖表上邊框
-            offset_right = int(new_w * (1 - RIGHT_MARGIN)) + 2 # +2px 避免壓到圖表右邊框
+            offset_top = int(new_h * (1 - TOP_MARGIN)) + 2
+            offset_right = int(new_w * (1 - RIGHT_MARGIN)) + 2
 
             hover_card.top = offset_top
             hover_card.right = offset_right
-            
 
             # 重新繪製 PIL 圖表
             try:
@@ -703,12 +701,12 @@ def main(page: ft.Page):
                 top_chart_panel,
                 bottom_setting_panel,
             ],
-            spacing=8,
+            spacing=12,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            scroll=ft.ScrollMode.AUTO,
+            scroll=ft.ScrollMode.ALWAYS,  # 強制開啟滾動
         ),
-        padding=ft.Padding(left=6, right=6, top=6, bottom=12),
-    )
+        padding=ft.Padding(left=6, right=6, top=6, bottom=30) # 加大底部 padding 方便滑到底
+      )
 
     page.on_resized = on_page_resize
     
