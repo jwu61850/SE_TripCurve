@@ -301,9 +301,9 @@ def main(page: ft.Page):
     default_colors = ["#E63946", "#F4A261", "#2A9D8F", "#457B9D", "#1D3557", "#8D99AE"]
     
     stage_configs = [
-        {"name": "IED_1", "voltage": 161000.0, "enable_51": True,  "std": "IEC",   "type": "NI", "ip": 200,  "tms": 0.4, "enable_50": True,  "inst_ip": 1200, "inst_time": 0.03},
-        {"name": "IED_2", "voltage": 22800.0,  "enable_51": True,  "std": "IEC",   "type": "NI", "ip": 800,  "tms": 0.3, "enable_50": True,  "inst_ip": 7000, "inst_time": 0.02},
-        {"name": "IED_3", "voltage": 11400.0,  "enable_51": True,  "std": "IEC",   "type": "NI", "ip": 1500, "tms": 0.2, "enable_50": True,  "inst_ip": 12000, "inst_time": 0.01},
+        {"name": "IED_1", "voltage": 22800.0, "enable_51": True,  "std": "IEC",   "type": "NI", "ip": 150,  "tms": 0.4, "enable_50": True,  "inst_ip": 2000, "inst_time": 0.03},
+        {"name": "IED_2", "voltage": 11400.0,  "enable_51": True,  "std": "IEC",   "type": "NI", "ip": 200,  "tms": 0.3, "enable_50": True,  "inst_ip": 3000, "inst_time": 0.02},
+        {"name": "IED_3", "voltage": 3300.0,  "enable_51": True,  "std": "IEC",   "type": "NI", "ip": 500, "tms": 0.2, "enable_50": True,  "inst_ip": 8000, "inst_time": 0.01},
         {"name": "IED_4", "voltage": 380.0,    "enable_51": False, "std": "IEEE2", "type": "EI", "ip": 800,  "tms": 0.4, "enable_50": False, "inst_ip": 3000, "inst_time": 0.03},
         {"name": "IED_5", "voltage": 4160.0,   "enable_51": False, "std": "IEEE",  "type": "VI", "ip": 1200, "tms": 0.5, "enable_50": False, "inst_ip": 10000,"inst_time": 0.03},
         {"name": "IED_6", "voltage": 220.0,    "enable_51": False, "std": "IEEE",  "type": "VI", "ip": 2000, "tms": 0.6, "enable_50": False, "inst_ip": 15000,"inst_time": 0.03},
@@ -336,11 +336,11 @@ def main(page: ft.Page):
         border=ft.Border.all(1, "#B0BEC5"),
         border_radius=5,
         shadow=ft.BoxShadow(spread_radius=1, blur_radius=4, color="black12"),
-        visible=False,
+        visible=True, #常駐顯示
         # --- 動態精準對齊設定 ---
         top=0,      # 靠頂部對齊（後續在 on_page_resize 計算）
         right=0,    # 靠右側對齊（後續在 on_page_resize 計算）
-        width=130,
+        width=120,
     )
 
     # 改為 CONTAIN 避免圖片被拉伸擠壓
@@ -366,31 +366,40 @@ def main(page: ft.Page):
     )
 
     def update_hover_card(current_A):
-        if current_A is None or current_A < 10.0 or current_A > 100000.0:
-            hover_card.visible = False
-            return
-
+        #if current_A is None or current_A < 10.0 or current_A > 100000.0:
+        #    hover_card.visible = False
+        #    return
+        #hover_I_val_text.value = f"{current_A:,.1f} A"
+        
         v_base = stage_configs[current_selected_index[0]]["voltage"]
-        hover_I_val_text.value = f"{current_A:,.1f} A"
+        
+        # 檢查電流是否在有效範圍內 (10A ~ 100kA)
+        is_valid_i = (current_A is not None) and (10.0 <= current_A <= 100000.0)
+        # 更新電流標題數值
+        hover_I_val_text.value = f"{current_A:,.1f} A" if is_valid_i else "---.-A"
         hover_details_column.controls.clear()
 
         for i, config in enumerate(stage_configs):
             if not config["enable_51"] and not config["enable_50"]:
                 continue
 
-            ratio = config["voltage"] / v_base
-            ip_base = config["ip"] * ratio
-            inst_ip_base = config["inst_ip"] * ratio
-
-            t_val = calc_trip_time(
-                standard=config["std"], curve_type=config["type"], I_base=np.array([current_A]),
-                Ip_base=ip_base, TMS_TD=config["tms"], enable_51=config["enable_51"],
-                enable_50=config["enable_50"], inst_ip_base=inst_ip_base, inst_time=config["inst_time"]
-            )[0]
-
-            t_str = "不動作" if np.isnan(t_val) else f"{t_val:.3f} s"
             v_str = f"{config['voltage']/1000:.1f}kV" if config['voltage'] >= 1000 else f"{int(config['voltage'])}V"
-            
+
+            if is_valid_i:
+                ratio = config["voltage"] / v_base
+                ip_base = config["ip"] * ratio
+                inst_ip_base = config["inst_ip"] * ratio
+
+                t_val = calc_trip_time(
+                    standard=config["std"], curve_type=config["type"], I_base=np.array([current_A]),
+                    Ip_base=ip_base, TMS_TD=config["tms"], enable_51=config["enable_51"],
+                    enable_50=config["enable_50"], inst_ip_base=inst_ip_base, inst_time=config["inst_time"]
+                )[0]
+
+                t_str = "不動作" if np.isnan(t_val) else f"{t_val:.3f} s"
+            else:
+                t_str = "-.---s"
+
             hover_details_column.controls.append(
                 ft.Row(
                     controls=[
@@ -401,7 +410,10 @@ def main(page: ft.Page):
                     spacing=1,
                 )
             )
+            
+        # 保持卡片開啟    
         hover_card.visible = True
+        
 
     INPUT_HEIGHT, TEXT_HEIGHT = 36, 48
     CHK_SLOT_WIDTH, TEXT_SIZE = 30, 15
@@ -723,6 +735,7 @@ def main(page: ft.Page):
         )
 
     load_loop_data(0)
+    update_hover_card(None)  # <--- 初始化浮動卡片內容為 "---"
     on_page_resize(None)
     
     # 加入背景尺寸監測 (解決 Mobile 轉向事件丟失的問題)
