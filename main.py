@@ -340,7 +340,7 @@ def main(page: ft.Page):
         # --- 動態精準對齊設定 ---
         top=0,      # 靠頂部對齊（後續在 on_page_resize 計算）
         right=0,    # 靠右側對齊（後續在 on_page_resize 計算）
-        width=120,
+        width=130,
     )
 
     # 改為 CONTAIN 避免圖片被拉伸擠壓
