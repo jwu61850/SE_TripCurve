@@ -3,10 +3,66 @@ import io
 import math
 import platform
 import sys
+import os
+import uuid
 import numpy as np
 import flet as ft
 from PIL import Image, ImageDraw, ImageFont
 import asyncio
+
+# 引入加密庫 (需 pip install cryptography)
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes, serialization
+
+# -----------------------------------------------------------------------------
+# 離線授權金鑰與驗證模組
+# -----------------------------------------------------------------------------
+# 打包在 APK 內的 RSA 公鑰 (開發者產生的公鑰，不怕公開)
+PUBLIC_KEY_PEM = b"""-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsy8DDhgbId1C3zYMAGp8
+hKDnl9jCjM7H4sPhzBn04U4iT2DcQo4PPAO6eQIJSGys77PmkPQQQVUur+IpW2p9
+NAXFeZ6prhTU88GJutzNmCPZ/5eK34ORlcTUdsnUwzFUzub83W8KNQFEN65iWVeo
+Q13h2x6OIjMygivEoSI/CjP69luebSHPlgBQUIXCNyWOkEQcmqNjQG0FUtjW39/c
+/NnN8EcfZzggGY2J5OvWitKbbTS18uSkysgyR0yIlMONultOMimefBhAjrJtaDcN
+keJepm5nTwWVV76rShCGDD4RxwNOdMrq3jITyRkl/1qktm79vic4cAFgfsTzFR8v
+TwIDAQAB
+-----END PUBLIC KEY-----"""
+
+def get_device_id():
+    """取得裝置唯一識別碼 (支援 PC 測試與 Android 實機)"""
+    # 1. 嘗試動態載入 Android 專用的 jnius (使用 importlib 避開 VS Code 靜態檢查)
+    try:
+        import importlib
+        jnius = importlib.import_module("jnius")
+        autoclass = jnius.autoclass
+        
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        Settings = autoclass('android.provider.Settings$Secure')
+        context = PythonActivity.mActivity.getContentResolver()
+        android_id = Settings.getString(context, Settings.ANDROID_ID)
+        if android_id:
+            return f"AND-{android_id}".upper()
+    except Exception:
+        pass  # 電腦端執行時會自動跳過此區塊
+
+    # 2. 電腦端 (Windows / Mac) 測試時的備案 (使用網卡 MAC/UUID)
+    raw_id = str(uuid.getnode())
+    return f"DEV-{raw_id[-12:]}".upper()
+
+def verify_license(license_bytes, device_id):
+    """使用公鑰解密驗證 license.lic 內容是否匹配當前 device_id"""
+    try:
+        public_key = serialization.load_pem_public_key(PUBLIC_KEY_PEM)
+        public_key.verify(
+            license_bytes,
+            device_id.encode('utf-8'),
+            padding.PKCS1v15(),
+            hashes.SHA256()
+        )
+        return True, "授權驗證成功"
+    except Exception as e:
+        return False, "授權無效或裝置 ID 不符合"
+
 
 # -----------------------------------------------------------------------------
 # 跨平台裝置判斷
@@ -297,6 +353,87 @@ def main(page: ft.Page):
     page.window.min_width = 360
     page.window.min_height = 500
     page.window.center_on_screen = True
+    
+    # -------------------------------------------------------------------------
+    # 離線授權驗證流程
+    # -------------------------------------------------------------------------
+    device_id = get_device_id()
+    
+    # 預設許可證存放路徑 (App 私有目錄)
+    license_file_path = "license.lic"
+    
+    is_licensed = False
+    if os.path.exists(license_file_path):
+        try:
+            with open(license_file_path, "rb") as f:
+                is_licensed, _ = verify_license(f.read(), device_id)
+        except Exception:
+            is_licensed = False
+            
+    # --- 未授權時彈出的 UI 介面 ---
+    if not is_licensed:
+        tf_dev_id = ft.TextField(value=device_id, read_only=True, label="您的裝置 ID", expand=True)
+        
+        def copy_id(e):
+            page.set_clipboard(device_id)
+            page.snack_bar = ft.SnackBar(ft.Text("已複製裝置 ID！"))
+            page.snack_bar.open = True
+            page.update()
+
+        def on_file_picked(e: ft.FilePickerResultEvent):
+            if e.files and len(e.files) > 0:
+                picked_path = e.files[0].path
+                with open(picked_path, "rb") as f:
+                    lic_data = f.read()
+                
+                valid, msg = verify_license(lic_data, device_id)
+                if valid:
+                    # 將驗證成功的 license 保存到本地
+                    with open("license.lic", "wb") as f:
+                        f.write(lic_data)
+                    dlg_auth.open = False
+                    page.snack_bar = ft.SnackBar(ft.Text("授權成功！請重新啟動或刷新 App"))
+                    page.snack_bar.open = True
+                    page.update()
+                    # 重新載入主介面
+                    page.controls.clear()
+                    build_main_app(page)
+                else:
+                    page.snack_bar = ft.SnackBar(ft.Text(f"驗證失敗: {msg}"), bgcolor="red")
+                    page.snack_bar.open = True
+                    page.update()
+
+        # 1. 先建立 FilePicker 物件並指定 on_result 屬性
+        file_picker = ft.FilePicker()
+        file_picker.on_result = on_file_picked
+        
+        page.overlay.append(file_picker)
+
+        # 2. 建立對話框
+        dlg_auth = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("🔒 系統未授權"),
+            content=ft.Column(
+                [
+                    ft.Text("本程式需硬體授權才可使用。請複製上方 ID 並提供給管理員取得 license.lic 檔案。"),
+                    ft.Row([tf_dev_id, ft.IconButton(icon=ft.Icons.COPY, on_click=copy_id)]),
+                ],
+                height=120,
+            ),
+        )
+        
+        page.add(dlg_auth)
+        dlg_auth.open = True
+        page.update()
+        return  # 攔截：未授權時不執行後續主介面代碼
+    
+    # -------------------------------------------------------------------------
+    # 已授權：繼續執行原有的 App 主介面代碼
+    # -------------------------------------------------------------------------
+    build_main_app(page)
+    
+    
+def build_main_app(page: ft.Page):
 
     default_colors = ["#E63946", "#F4A261", "#2A9D8F", "#457B9D", "#1D3557", "#8D99AE"]
     
@@ -723,7 +860,7 @@ def main(page: ft.Page):
             scroll=ft.ScrollMode.AUTO,  # 強制開啟滾動
         ),
         padding=ft.Padding(left=6, right=6, top=6, bottom=40) # 加大底部 padding 方便滑到底
-      )
+    )
 
     page.on_resized = on_page_resize
     
@@ -748,6 +885,7 @@ def main(page: ft.Page):
                 on_page_resize(None)
 
     page.run_task(monitor_orientation)
+
     
 if __name__ == "__main__":
     ft.run(main)
