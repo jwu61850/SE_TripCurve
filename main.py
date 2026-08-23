@@ -668,7 +668,7 @@ def main(page: ft.Page):
             # 手機橫放時顯示的 PIL 高度 
             if is_landscape:
                 # 橫向：讓圖表保持較舒適的比例 (例如寬高的 16:9 或 2:1)
-                new_h = max(int(ph * 0.83), 280)
+                new_h = max(int(ph * 0.78), 280)
                 #new_h = int(new_w / (16/9))
             else:
                 # 直向：維持原本的黃金比例
