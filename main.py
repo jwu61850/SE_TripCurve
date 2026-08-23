@@ -76,9 +76,9 @@ CURVE_FAMILY_MAP = {
 #LEFT_MARGIN, RIGHT_MARGIN = 0.16, 0.94
 #TOP_MARGIN, BOTTOM_MARGIN = 0.78, 0.20
 
-# 改成這樣 (增加左、下、上的留白)：
-LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.96 #0.18, 0.94
-TOP_MARGIN, BOTTOM_MARGIN = 0.90, 0.12 # TOP_MARGIN larger, the upper space is lesser
+# 調整 PIL 上下左右的間距位置(即調整PIL的大小),以左上角為參考點
+LEFT_MARGIN, RIGHT_MARGIN = 0.10, 0.96
+TOP_MARGIN, BOTTOM_MARGIN = 0.08, 0.86
 
 # 載入字體 (若無向量字體則改用預設)
 # PIL 上顯示的字型
@@ -148,18 +148,17 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     img = Image.new("RGB", (draw_w, draw_h), "white")
     draw = ImageDraw.Draw(img)
 
-
-
     x_min, x_max = 10.0, 100000.0
     y_min, y_max = 0.001, 360.0
 
     log_x_min, log_x_max = math.log10(x_min), math.log10(x_max)
     log_y_min, log_y_max = math.log10(y_min), math.log10(y_max)
 
+    # PIL 座標
     plot_x0 = int(draw_w * LEFT_MARGIN)
     plot_x1 = int(draw_w * RIGHT_MARGIN)
-    plot_y0 = int(draw_h * (1 - TOP_MARGIN))
-    plot_y1 = int(draw_h * (1 - BOTTOM_MARGIN))
+    plot_y0 = int(draw_h * TOP_MARGIN)
+    plot_y1 = int(draw_h * BOTTOM_MARGIN)
 
     def val_to_px(val_x, val_y):
         lx = math.log10(max(val_x, x_min))
@@ -178,7 +177,7 @@ def render_trip_curve_pil(stage_configs, default_colors, selected_idx=0, test_cu
     draw.text((plot_x0, title_y_pos), "Schneider Electric (Taiwan)", fill="#000000", font=FONT_TITLE)
     
     base_v_text = f"Base Voltage : {v_base_str}"
-    draw.text((plot_x1 - int(draw_w * 0.28), title_y_pos), base_v_text, fill="#D90429", font=FONT_TITLE)
+    draw.text((plot_x1 - int(draw_w * 0.34), title_y_pos), base_v_text, fill="#D90429", font=FONT_TITLE)
 
     draw.rectangle([plot_x0, plot_y0, plot_x1, plot_y1], outline="#333333", width=int(1.5 * scale))
 
@@ -440,6 +439,7 @@ def main(page: ft.Page):
 
         tf_test_result.value = "不動作" if np.isnan(t_val) else f"{t_val:.3f}"
 
+    # 重新設定 PIL 顯示參數
     def redraw_pil_chart(current_i=None, pw=None, ph=None):
         w = chart_dim["w"]
         h = chart_dim["h"]
@@ -451,6 +451,7 @@ def main(page: ft.Page):
         chart_interactive.width = w
         chart_interactive.height = h
 
+        # 呼叫顯示 PIL
         chart_image.src = render_trip_curve_pil(
             stage_configs, default_colors, 
             selected_idx=current_selected_index[0], 
@@ -651,6 +652,7 @@ def main(page: ft.Page):
         #expand=True
     )
 
+    # 動態計算PIL顯示大小
     def on_page_resize(e):
             # 優先從事件 e 取得 width / height，若無則讀取 page 的寬高
             if e and hasattr(e, "width") and e.width > 0:
@@ -663,9 +665,10 @@ def main(page: ft.Page):
             is_landscape = pw > ph
             new_w = max(int(pw - 16), 300)
 
+            # 手機橫放時顯示的 PIL 高度 
             if is_landscape:
                 # 橫向：讓圖表保持較舒適的比例 (例如寬高的 16:9 或 2:1)
-                new_h = max(int(ph * 0.85), 280)
+                new_h = max(int(ph * 0.83), 280)
                 #new_h = int(new_w / (16/9))
             else:
                 # 直向：維持原本的黃金比例
@@ -679,8 +682,8 @@ def main(page: ft.Page):
             # PIL 的頂部邊界為 (1 - TOP_MARGIN)，即 1 - 0.82 = 0.18
             # PIL 的右側邊界為 RIGHT_MARGIN，即 0.96 (右邊留白 4%)
             
-            offset_top = int(new_h * (1 - TOP_MARGIN)) + 2
-            offset_right = int(new_w * (1 - RIGHT_MARGIN)) + 2
+            offset_top = int(new_h * TOP_MARGIN) + 2
+            offset_right = int(new_w * (1-RIGHT_MARGIN)) + 2
 
             hover_card.top = offset_top
             hover_card.right = offset_right
@@ -691,6 +694,7 @@ def main(page: ft.Page):
             except (ValueError, AttributeError):
                 cur_i = None
 
+            # 重新設定 PIL 顯示參數
             redraw_pil_chart(current_i=cur_i, pw=pw, ph=ph)
             page.update()
 
