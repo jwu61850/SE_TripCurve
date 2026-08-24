@@ -364,15 +364,19 @@ def main(page: ft.Page):
     page.window.min_width = 360
     page.window.min_height = 500
     page.window.center_on_screen = True
-    
+
     # -------------------------------------------------------------------------
-    # 離線授權驗證流程
+    # 1. 裝置 ID 與檔案路徑設定
     # -------------------------------------------------------------------------
     device_id = get_persistent_device_id()
-    
-    # 預設許可證存放路徑 (App 私有目錄)
-    license_file_path = "license.lic"
-    
+    license_file_path = os.path.join(os.getcwd(), "license.lic")
+
+    # 新版：直接宣告 FilePicker，不需 page.overlay.append()
+    file_picker = ft.FilePicker()
+
+    # -------------------------------------------------------------------------
+    # 2. 驗證本地授權狀態
+    # -------------------------------------------------------------------------
     is_licensed = False
     if os.path.exists(license_file_path):
         try:
@@ -380,70 +384,93 @@ def main(page: ft.Page):
                 is_licensed, _ = verify_license(f.read(), device_id)
         except Exception:
             is_licensed = False
-            
-    # --- 未授權時彈出的 UI 介面 ---
+
+    # -------------------------------------------------------------------------
+    # 3. 未授權介面
+    # -------------------------------------------------------------------------
     if not is_licensed:
-        tf_dev_id = ft.TextField(value=device_id, read_only=True, label="您的裝置 ID", expand=True)
-        
-        def copy_id(e):
-            page.set_clipboard(device_id)
-            page.snack_bar = ft.SnackBar(ft.Text("已複製裝置 ID！"))
-            page.snack_bar.open = True
+        # 點擊選取檔案：相容新版 Flet 回傳 List[FilePickerFile] 的機制
+        async def pick_license_file(e):
+            # 先關閉彈窗釋放 UI 焦點
+            dlg_auth.open = False
             page.update()
 
-        def on_file_picked(e: ft.FilePickerResultEvent):
-            if e.files and len(e.files) > 0:
-                picked_path = e.files[0].path
-                with open(picked_path, "rb") as f:
-                    lic_data = f.read()
-                
-                valid, msg = verify_license(lic_data, device_id)
-                if valid:
-                    # 將驗證成功的 license 保存到本地
-                    with open("license.lic", "wb") as f:
-                        f.write(lic_data)
-                    dlg_auth.open = False
-                    page.snack_bar = ft.SnackBar(ft.Text("授權成功！請重新啟動或刷新 App"))
+            # pick_files 直接回傳檔案物件列表 (List)
+            res = await file_picker.pick_files(
+                dialog_title="請選擇 license.lic 檔案",
+                allow_multiple=False
+            )
+
+            # res 本身即為 List，直接判斷長度並存取 res[0]
+            if res and len(res) > 0:
+                picked_path = res[0].path
+                try:
+                    with open(picked_path, "rb") as f:
+                        lic_data = f.read()
+
+                    valid, msg = verify_license(lic_data, device_id)
+                    if valid:
+                        with open(license_file_path, "wb") as f:
+                            f.write(lic_data)
+
+                        page.snack_bar = ft.SnackBar(ft.Text("✅ 授權成功！已儲存金鑰"))
+                        page.snack_bar.open = True
+                        page.update()
+
+                        # 驗證成功，載入主程式
+                        page.controls.clear()
+                        build_main_app(page)
+                    else:
+                        dlg_auth.open = True
+                        page.snack_bar = ft.SnackBar(ft.Text(f"❌ 授權失敗: {msg}"), bgcolor="red")
+                        page.snack_bar.open = True
+                        page.update()
+                except Exception as ex:
+                    dlg_auth.open = True
+                    page.snack_bar = ft.SnackBar(ft.Text(f"讀取失敗: {ex}"), bgcolor="red")
                     page.snack_bar.open = True
                     page.update()
-                    # 重新載入主介面
-                    page.controls.clear()
-                    build_main_app(page)
-                else:
-                    page.snack_bar = ft.SnackBar(ft.Text(f"驗證失敗: {msg}"), bgcolor="red")
-                    page.snack_bar.open = True
-                    page.update()
+            else:
+                # 使用者取消選取：重新開啟授權視窗
+                dlg_auth.open = True
+                page.update()
 
-        # 1. 先建立 FilePicker 物件並指定 on_result 屬性
-        file_picker = ft.FilePicker()
-        file_picker.on_result = on_file_picked
-        
-        page.overlay.append(file_picker)
 
-        # 2. 建立對話框
+
         dlg_auth = ft.AlertDialog(
             modal=True,
             title=ft.Text("🔒 系統未授權"),
             content=ft.Column(
                 [
-                    ft.Text("本程式需硬體授權才可使用。請複製上方 ID 並提供給管理員取得 license.lic 檔案。"),
-                    ft.Row([tf_dev_id, ft.IconButton(icon=ft.Icons.COPY, on_click=copy_id)]),
+                    ft.Text("請複製下方 Device ID 取得授權檔，點擊下方按鈕匯入 license.lic。"),
+                    ft.Row([
+                        ft.TextField(value=device_id, read_only=True, expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.COPY, 
+                            on_click=lambda _: page.set_clipboard(device_id)
+                        )
+                    ]),
                 ],
-                height=120,
+                height=140,
             ),
+            actions=[
+                ft.Button(
+                    "選取並匯入 license.lic", 
+                    icon=ft.Icons.UPLOAD_FILE, 
+                    on_click=pick_license_file
+                )
+            ],
         )
-        
+
         page.add(dlg_auth)
         dlg_auth.open = True
         page.update()
-        return  # 攔截：未授權時不執行後續主介面代碼
-    
-    # -------------------------------------------------------------------------
-    # 已授權：繼續執行原有的 App 主介面代碼
-    # -------------------------------------------------------------------------
+        return
+
+    # 已授權，執行主要介面
     build_main_app(page)
-    
-    
+
+ 
 def build_main_app(page: ft.Page):
 
     default_colors = ["#E63946", "#F4A261", "#2A9D8F", "#457B9D", "#1D3557", "#8D99AE"]
