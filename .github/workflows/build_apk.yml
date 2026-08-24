@@ -33,7 +33,7 @@ jobs:
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flet numpy pillow
+          pip install flet numpy pillow cryptography
 
       # 2. 加入 --yes 參數以自動跳過提示詢問 (防範 EOFError)
       - name: Build Android APK
