@@ -29,25 +29,36 @@ keJepm5nTwWVV76rShCGDD4RxwNOdMrq3jITyRkl/1qktm79vic4cAFgfsTzFR8v
 TwIDAQAB
 -----END PUBLIC KEY-----"""
 
-def get_persistent_device_id(page: ft.Page) -> str:
+def get_persistent_device_id() -> str:
     """
-    透過 Flet 的 client_storage 取得/生成永久固定的 Device ID。
-    - 第一次開啟：生成 UUID 並寫入儲存區
-    - 之後開啟：直接讀取儲存區內的固定 ID
+    透過本地實體文字檔 (device_id.txt) 取得或建立永久固定的 Device ID。
+    不依賴 page.client_storage，適用於 Windows 與 Android APK。
     """
+    # 取得目前程式執行目錄或儲存目錄下的 device_id.txt 檔案路徑
+    id_file_path = "device_id.txt"
+    
+    # 1. 嘗試讀取已存在的 Device ID
+    if os.path.exists(id_file_path):
+        try:
+            with open(id_file_path, "r", encoding="utf-8") as f:
+                saved_id = f.read().strip()
+                if saved_id:
+                    return saved_id
+        except Exception as e:
+            print(f"Read device ID error: {e}")
+
+    # 2. 若檔案不存在或讀取失敗，產生全新唯一的 Device ID
+    raw_uuid = str(uuid.uuid4()).replace("-", "").upper()[:12]
+    new_device_id = f"DEV-{raw_uuid}"
+
+    # 3. 將新的 Device ID 寫入本地檔案鎖定
     try:
-        # 嘗試讀取先前保存的 device_id
-        device_id = page.client_storage.get("app_device_id")
-        if not device_id:
-            # 若無，則生成新 ID (格式: AND-16位英數大寫)
-            raw_uuid = str(uuid.uuid4()).replace("-", "").upper()[:12]
-            device_id = f"DEV-{raw_uuid}"
-            page.client_storage.set("app_device_id", device_id)
-        return device_id
+        with open(id_file_path, "w", encoding="utf-8") as f:
+            f.write(new_device_id)
     except Exception as e:
-        # 備用備案 (若 client_storage 發生異常)
-        raw_id = str(uuid.getnode())
-        return f"DEV-{raw_id[-12:]}".upper()
+        print(f"Save device ID error: {e}")
+
+    return new_device_id
 
 def verify_license(license_bytes, device_id):
     """使用公鑰解密驗證 license.lic 內容是否匹配當前 device_id"""
@@ -357,7 +368,7 @@ def main(page: ft.Page):
     # -------------------------------------------------------------------------
     # 離線授權驗證流程
     # -------------------------------------------------------------------------
-    device_id = get_persistent_device_id(page)
+    device_id = get_persistent_device_id()
     
     # 預設許可證存放路徑 (App 私有目錄)
     license_file_path = "license.lic"
