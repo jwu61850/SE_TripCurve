@@ -1,3 +1,4 @@
 flet
 numpy
 pillow
+cryptography
